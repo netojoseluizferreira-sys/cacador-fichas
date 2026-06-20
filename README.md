@@ -28,7 +28,7 @@ O app usa Supabase para:
 - O botao Admin aparece direto no menu quando a conta admin entra.
 - Ao editar uma ficha pelo Escudo, o admin pode alterar livremente a ficha do jogador e salvar no banco.
 - Subgrupos de cronica com valores de Desespero e Perigo visiveis nas fichas dos jogadores daquele subgrupo.
-- Rolagem de Impeto usa Dados de Desespero separados, detecta 1 nos Dados de Desespero e permite aumentar Perigo do subgrupo via funcao segura no Supabase.
+- Rolagem de Impeto usa Dados de Desespero separados; se sair 1 em Desespero, pergunta se o teste passou antes de aplicar Perigo ou Aflicao.
 
 Configure [supabase-config.js](./supabase-config.js):
 

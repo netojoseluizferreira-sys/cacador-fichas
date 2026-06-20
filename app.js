@@ -934,19 +934,16 @@ function criarIdRolagem() {
   return window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function resultadoImpeto(dadosNormais, dadosDesespero, dificuldade) {
+function resultadoImpeto(dadosNormais, dadosDesespero) {
   const resultadoTotal = resultadoRolagem([...dadosNormais, ...dadosDesespero]);
   const desesperoOnes = dadosDesespero.filter((dado) => dado === 1).length;
-  const vitoria = resultadoTotal.sucessos >= dificuldade;
   return {
     ...resultadoTotal,
     dados: dadosNormais,
     dadosDesespero,
     desesperoOnes,
-    dificuldade,
-    vitoria,
-    forcarBarra: desesperoOnes > 0 && vitoria,
-    aflicao: desesperoOnes > 0 && !vitoria
+    impetoPassou: null,
+    aflicao: false
   };
 }
 
@@ -2336,9 +2333,8 @@ function rolarDados(usarImpeto = false) {
   const dadosDesespero = usarImpeto
     ? Array.from({ length: Math.max(0, valoresGrupoCronica.desespero) }, () => Math.floor(Math.random() * 10) + 1)
     : [];
-  const dificuldade = Math.max(1, valor("rolagemDificuldade"));
   const resultado = usarImpeto
-    ? resultadoImpeto(dadosNormais, dadosDesespero, dificuldade)
+    ? resultadoImpeto(dadosNormais, dadosDesespero)
     : resultadoRolagem(dadosNormais);
 
   state.rolagens.push({
@@ -2369,35 +2365,47 @@ function formatarDataRolagem(data) {
 
 function renderRolagens() {
   $("historicoRolagens").innerHTML = state.rolagens.length
-    ? state.rolagens.slice().reverse().map((item) => {
-      const dados = Array.isArray(item.dados) ? item.dados : [];
-      const dadosDesespero = Array.isArray(item.dadosDesespero) ? item.dadosDesespero : [];
-      const sucessos = Number(item.sucessos || 0);
-      const sucessosBase = Number(item.sucessosBase || 0);
-      const sucessosExtras = Number(item.sucessosExtras || 0);
-      const totalDados = Number(item.totalDados || dados.length);
-      const resultado = item.impeto && item.dificuldade
-        ? sucessos >= Number(item.dificuldade) ? "vitória" : "falha"
-        : sucessos > 0 ? "sucesso" : "falha";
-      const critico = item.critico ? "sim" : "nao";
-      const avisoImpeto = textoAvisoImpeto(item);
-      return `
-        <div>
-          <strong>${escaparHtml(textoTipoRolagem(item.tipo))}</strong>
-          <span>${escaparHtml(formatarDataRolagem(item.data))}</span>
-          <span>${escaparHtml(item.descricao || "Rolagem")} - ${totalDados} dado(s)</span>
-          <span>Dados: ${dados.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"}</span>
-          ${item.impeto ? `<span>Dados de Desespero: ${dadosDesespero.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"} (${Number(item.desesperoOnes || 0)} resultado(s) 1)</span>` : ""}
-          <span>Sucessos: <strong>${sucessos}</strong> (${sucessosBase} em 6+, +${sucessosExtras} por pares de 10) - Critico: ${critico} - Resultado: ${resultado}${item.dificuldade ? ` contra dificuldade ${Number(item.dificuldade)}` : ""}</span>
-          ${avisoImpeto}
-        </div>
-      `;
-    }).join("")
+    ? state.rolagens.slice().reverse().map((item) => rolagemHistoricoHtml(item)).join("")
     : "<div>Nenhuma rolagem ainda.</div>";
 
   document.querySelectorAll("[data-aumentar-perigo]").forEach((botao) => {
     botao.addEventListener("click", () => aumentarPerigoPorImpeto(botao.dataset.aumentarPerigo));
   });
+
+  document.querySelectorAll("[data-impeto-passou]").forEach((botao) => {
+    botao.addEventListener("click", () => resolverImpeto(botao.dataset.impetoPassou, true));
+  });
+
+  document.querySelectorAll("[data-impeto-falhou]").forEach((botao) => {
+    botao.addEventListener("click", () => resolverImpeto(botao.dataset.impetoFalhou, false));
+  });
+
+  document.querySelectorAll("[data-impeto-aflicao]").forEach((botao) => {
+    botao.addEventListener("click", () => marcarAflicaoImpeto(botao.dataset.impetoAflicao));
+  });
+}
+
+function rolagemHistoricoHtml(item) {
+  const dados = Array.isArray(item.dados) ? item.dados : [];
+  const dadosDesespero = Array.isArray(item.dadosDesespero) ? item.dadosDesespero : [];
+  const sucessos = Number(item.sucessos || 0);
+  const sucessosBase = Number(item.sucessosBase || 0);
+  const sucessosExtras = Number(item.sucessosExtras || 0);
+  const totalDados = Number(item.totalDados || dados.length);
+  const critico = item.critico ? "sim" : "nao";
+  const avisoImpeto = textoAvisoImpeto(item);
+
+  return `
+    <div>
+      <strong>${escaparHtml(textoTipoRolagem(item.tipo))}</strong>
+      <span>${escaparHtml(formatarDataRolagem(item.data))}</span>
+      <span>${escaparHtml(item.descricao || "Rolagem")} - ${totalDados} dado(s)</span>
+      <span>Dados: ${dados.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"}</span>
+      ${item.impeto ? `<span>Dados de Desespero: ${dadosDesespero.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"} (${Number(item.desesperoOnes || 0)} resultado(s) 1)</span>` : ""}
+      <span>Sucessos: <strong>${sucessos}</strong> (${sucessosBase} em 6+, +${sucessosExtras} por pares de 10) - Critico: ${critico}</span>
+      ${avisoImpeto}
+    </div>
+  `;
 }
 
 function textoAvisoImpeto(item) {
@@ -2410,14 +2418,47 @@ function textoAvisoImpeto(item) {
     return `<span><strong>Falha crítica/Aflição:</strong> o teste falha e o Caçador não pode usar Dados de Desespero até se redimir pelo Ímpeto.</span>`;
   }
 
+  if (item.impetoPassou === null || item.impetoPassou === undefined) {
+    return `
+      <span><strong>1 em Dado de Desespero:</strong> o teste passou?</span>
+      <button class="secundario" type="button" data-impeto-passou="${item.id}">Passou</button>
+      <button class="secundario" type="button" data-impeto-falhou="${item.id}">Falhou</button>
+    `;
+  }
+
   const botao = item.subgrupoId && !item.perigoIncrementado
     ? `<button class="secundario" type="button" data-aumentar-perigo="${item.id}">Aumentar Perigo +${incremento}</button>`
     : item.perigoIncrementado ? "<span>Perigo do subgrupo já foi aumentado.</span>" : "";
 
   return `
-    <span><strong>1 em Dado de Desespero:</strong> escolha manter a vitória e aumentar Perigo em +${incremento}, ou tratar o teste como falha e entrar em Aflição.</span>
+    <span><strong>Teste passou com 1 em Dado de Desespero:</strong> escolha manter a vitória e aumentar Perigo em +${incremento}, ou tratar o teste como falha e entrar em Aflição.</span>
     ${botao}
+    <button class="secundario" type="button" data-impeto-aflicao="${item.id}">Tratar como falha/Aflição</button>
   `;
+}
+
+function resolverImpeto(rolagemId, passou) {
+  const item = state.rolagens.find((rolagem) => rolagem.id === rolagemId);
+  if (!item) {
+    return;
+  }
+
+  item.impetoPassou = Boolean(passou);
+  item.aflicao = !passou;
+  renderRolagens();
+  autoSalvar();
+}
+
+function marcarAflicaoImpeto(rolagemId) {
+  const item = state.rolagens.find((rolagem) => rolagem.id === rolagemId);
+  if (!item) {
+    return;
+  }
+
+  item.impetoPassou = false;
+  item.aflicao = true;
+  renderRolagens();
+  autoSalvar();
 }
 
 async function aumentarPerigoPorImpeto(rolagemId) {
@@ -2880,7 +2921,6 @@ function inicializarEventos() {
   $("rolagemAtributo2").addEventListener("change", atualizarControlesRolagem);
   $("rolagemHabilidade").addEventListener("change", atualizarControlesRolagem);
   $("rolagemBonus").addEventListener("input", atualizarControlesRolagem);
-  $("rolagemDificuldade").addEventListener("input", atualizarControlesRolagem);
   $("usarImpeto").addEventListener("change", atualizarControlesRolagem);
   $("rolarDados").addEventListener("click", () => rolarDados(false));
   $("rolarImpeto").addEventListener("click", () => rolarDados(true));

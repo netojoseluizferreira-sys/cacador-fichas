@@ -1,0 +1,151 @@
+{
+  "vantagens": [
+    { "nome": "Aliados", "categoria": "Antecedente", "min": 1, "max": 6, "resumo": "Pessoas ou grupos mortais que apoiam o Caçador." },
+    { "nome": "Base", "categoria": "Antecedente", "min": 1, "max": 3, "resumo": "Lugar seguro, privado ou preparado para a célula; o valor básico vai de pequeno a muito grande/seguro." },
+    { "nome": "Contatos", "categoria": "Antecedente", "min": 1, "max": 3, "resumo": "Fontes úteis de informação, favores e acesso." },
+    { "nome": "Fama", "categoria": "Antecedente", "min": 1, "max": 5, "resumo": "Reconhecimento público ou em uma subcultura." },
+    { "nome": "Influência", "categoria": "Antecedente", "min": 1, "max": 5, "resumo": "Peso social, político, criminal ou institucional." },
+    { "nome": "Lacaios", "categoria": "Antecedente", "min": 1, "max": 3, "resumo": "Servidores, assistentes ou seguidores leais, de ajudantes simples a pessoas talentosas." },
+    { "nome": "Linguística", "categoria": "Qualidade", "min": 1, "max": 5, "resumo": "Idiomas adicionais além das línguas padrão do personagem e da crônica." },
+    { "nome": "Máscara", "categoria": "Antecedente", "min": 1, "max": 2, "resumo": "Identidade falsa ou cobertura oficial." },
+    { "nome": "Mentor", "categoria": "Antecedente", "min": 1, "max": 5, "resumo": "Caçador ou grupo que orienta e ajuda ocasionalmente." },
+    { "nome": "Nutricionista", "categoria": "Qualidade", "min": 1, "max": 2, "resumo": "Preparo de refeições que ajuda na recuperação de Vitalidade Superficial." },
+    { "nome": "Recursos", "categoria": "Antecedente", "min": 1, "max": 5, "resumo": "Renda, bens, reservas ou patrimônio acessível." },
+    { "nome": "Status", "categoria": "Antecedente", "min": 1, "max": 5, "resumo": "Reputação em um credo, facção ou comunidade de Caçadores." },
+    { "nome": "Aura Inapropriada", "categoria": "Qualidade Sobrenatural", "min": 2, "max": 2, "valores": [2], "resumo": "Criaturas sobrenaturais podem perceber o Caçador de forma equivocada ou inquietante." },
+    { "nome": "Visual", "categoria": "Qualidade", "min": 2, "max": 4, "valores": [2, 4], "resumo": "Aparência marcante que ajuda em situações sociais apropriadas; use 2 para Belo ou 4 para Deslumbrante." },
+    { "nome": "Arsenal Oculto", "categoria": "Qualidade de Base", "min": 1, "max": 5, "resumo": "Suprimento escondido de armas básicas e munição na Base." },
+    { "nome": "Laboratório", "categoria": "Qualidade de Base", "min": 1, "max": 5, "resumo": "Instalação equipada para testes de Ciência ou Tecnologia." },
+    { "nome": "Luxo", "categoria": "Qualidade de Base", "min": 1, "max": 1, "resumo": "Conforto e aparência que ajudam testes Sociais feitos na Base." },
+    { "nome": "Poterna", "categoria": "Qualidade de Base", "min": 1, "max": 5, "resumo": "Saída discreta, rota oculta ou passagem de fuga da Base." },
+    { "nome": "Sala de Operações", "categoria": "Qualidade de Base", "min": 1, "max": 1, "resumo": "Espaço médico preparado para testes de Medicina na Base." },
+    { "nome": "Sala do Pânico", "categoria": "Qualidade de Base", "min": 1, "max": 5, "resumo": "Compartimento seguro para abrigo, contenção ou prisão temporária." },
+    { "nome": "Sistema de Segurança", "categoria": "Qualidade de Base", "min": 1, "max": 5, "resumo": "Alarmes, trancas e sensores contra entrada não autorizada." },
+    { "nome": "Vigilância", "categoria": "Qualidade de Base", "min": 1, "max": 5, "resumo": "Guardas ou segurança armada protegendo a Base." },
+    { "nome": "Sapateiro", "categoria": "Vantagem de Máscara", "min": 1, "max": 1, "resumo": "Capacidade de obter ou criar Máscaras." },
+    { "nome": "Zerado", "categoria": "Vantagem de Máscara", "min": 1, "max": 1, "resumo": "Registros reais apagados por alguém em posição privilegiada." },
+    { "nome": "Outra Vantagem aprovada", "categoria": "Personalizada", "min": 1, "max": 5, "resumo": "Use para opções aprovadas pelo Narrador que não estejam na lista." }
+  ],
+  "defeitos": [
+    { "nome": "Adversário", "categoria": "Defeito", "min": 1, "max": 3, "resumo": "Caçador rival ou força hostil ligada à Revanche." },
+    { "nome": "Analfabeto", "categoria": "Defeito", "min": 2, "max": 2, "resumo": "Não sabe ler ou escrever, limitando Habilidades acadêmicas modernas." },
+    { "nome": "Assombrada", "categoria": "Defeito de Base", "min": 1, "max": 5, "resumo": "A Base contém manifestação sobrenatural perigosa." },
+    { "nome": "Assustadora", "categoria": "Defeito de Base", "min": 1, "max": 1, "resumo": "A Base parece ameaçadora e atrai problemas sociais." },
+    { "nome": "Comprometida", "categoria": "Defeito de Base", "min": 2, "max": 2, "resumo": "A Base já foi invadida ou marcada por observadores." },
+    { "nome": "Dependência", "categoria": "Defeito de Substância", "min": 1, "max": 1, "resumo": "Vício que prejudica ações quando a substância não foi usada recentemente." },
+    { "nome": "Dependência Grave", "categoria": "Defeito de Substância", "min": 2, "max": 2, "resumo": "Versão mais severa de dependência, com penalidade maior." },
+    { "nome": "Desprezado", "categoria": "Defeito de Influência", "min": 2, "max": 2, "resumo": "Grupo ou região da cidade trabalha para frustrar o personagem." },
+    { "nome": "Erro de Série", "categoria": "Defeito", "min": 2, "max": 2, "resumo": "Registros oficiais ou bancos de dados colocam o personagem em apuros." },
+    { "nome": "Estigma", "categoria": "Defeito Sobrenatural", "min": 1, "max": 2, "resumo": "Feridas simbólicas sangram quando o Caçador sofre dano físico ou mental." },
+    { "nome": "Feio", "categoria": "Defeito", "min": 1, "max": 1, "resumo": "Aparência prejudica testes sociais apropriados." },
+    { "nome": "Indigente", "categoria": "Defeito", "min": 1, "max": 1, "resumo": "Sem dinheiro, casa ou segurança material." },
+    { "nome": "Infâmia", "categoria": "Defeito", "min": 2, "max": 2, "valores": [2], "resumo": "Fama por algo terrível ou perigoso." },
+    { "nome": "Inimigos", "categoria": "Defeito", "min": 1, "max": 2, "resumo": "O inverso de Aliados: oposição recorrente, calculada a partir da Efetividade." },
+    { "nome": "Maldição da Anciã", "categoria": "Defeito Sobrenatural", "min": 2, "max": 2, "resumo": "Aflição sobrenatural envelhece o Caçador e reduz sua Vitalidade." },
+    { "nome": "Malquisto", "categoria": "Defeito de Influência", "min": 1, "max": 1, "resumo": "Má reputação com um grupo ou região, prejudicando testes sociais." },
+    { "nome": "Parceiro Infame", "categoria": "Defeito", "min": 1, "max": 1, "resumo": "Alguém próximo carrega reputação prejudicial." },
+    { "nome": "Perseguidores", "categoria": "Defeito de Fama", "min": 1, "max": 1, "resumo": "Atrai pessoas obsessivas, abusivas ou oportunistas." },
+    { "nome": "Pessoa de Interesse", "categoria": "Defeito", "min": 1, "max": 1, "resumo": "Biometria, histórico ou nomes falsos aparecem em bases de vigilância." },
+    { "nome": "Repulsivo", "categoria": "Defeito", "min": 2, "max": 2, "resumo": "Aparência causa penalidade social mais forte." },
+    { "nome": "Segredo Sombrio", "categoria": "Defeito", "min": 1, "max": 1, "resumo": "Algo oculto que inimigos motivados podem expor." },
+    { "nome": "Segregado", "categoria": "Defeito", "min": 2, "max": 2, "resumo": "Uma facção detesta o personagem e age contra ele." },
+    { "nome": "Sem Base", "categoria": "Defeito de Base", "min": 1, "max": 1, "resumo": "Não há expectativa real de segurança em casa." },
+    { "nome": "Suspeito", "categoria": "Defeito", "min": 1, "max": 1, "resumo": "Relação ruim com uma facção específica." },
+    { "nome": "Vivendo no Limite", "categoria": "Defeito Psicológico", "min": 2, "max": 2, "resumo": "Compulsão por experiências arriscadas e tentações novas." },
+    { "nome": "Vontade Fraca", "categoria": "Defeito", "min": 2, "max": 2, "resumo": "Dificuldade em resistir a vontades e influências externas." },
+    { "nome": "Outro Defeito aprovado", "categoria": "Personalizado", "min": 1, "max": 5, "resumo": "Use para complicações aprovadas pelo Narrador." }
+  ],
+  "trunfos": [
+    { "nome": "Acesso Global", "categoria": "Aptidão", "resumo": "Acesso extraordinário a sistemas digitais, vigilância, registros e dados protegidos." },
+    { "nome": "Equipamento Improvisado", "categoria": "Aptidão", "resumo": "Cria ferramentas úteis e temporárias a partir de objetos e materiais disponíveis." },
+    { "nome": "Encantador de Feras", "categoria": "Aptidão", "resumo": "Treina e conduz um animal leal como companheiro confiável na caçada." },
+    { "nome": "Jóquei de Drones", "categoria": "Aptidão", "resumo": "Controla, repara e adapta drones superiores aos aparelhos comerciais comuns." },
+    { "nome": "Arsenal", "categoria": "Ativo", "resumo": "Obtém armas de fogo ou armas brancas mundanas por tempo limitado." },
+    { "nome": "Artilharia", "categoria": "Ativo", "resumo": "Fornece minas, explosivos ou cargas de demolição temporárias." },
+    { "nome": "Biblioteca", "categoria": "Ativo", "resumo": "Pesquisa pistas sobre comportamento, fraquezas e natureza da presa." },
+    { "nome": "Frota", "categoria": "Ativo", "resumo": "Consegue veículos pessoais ou comerciais em curto prazo." },
+    { "nome": "Artefato", "categoria": "Dote", "resumo": "Objeto raro ou inexplicável que concede bônus a uma Habilidade associada." },
+    { "nome": "Frustrar o Sobrenatural", "categoria": "Dote", "resumo": "Resiste a poderes sobrenaturais direcionados ao Caçador ou a uma área protegida." },
+    { "nome": "Repelir o Sobrenatural", "categoria": "Dote", "resumo": "Usa um foco para manter criaturas sobrenaturais afastadas." },
+    { "nome": "Sentir o Sobrenatural", "categoria": "Dote", "resumo": "Detecta a presença próxima de criaturas sobrenaturais com um objeto de foco." },
+    { "nome": "Outro Trunfo aprovado", "categoria": "Personalizado", "resumo": "Use para Trunfos aprovados pelo Narrador que não estejam na lista." }
+  ],
+  "distincoesPorTrunfo": {
+    "Acesso Global": [
+      { "nome": "Grande Irmão Vigilante", "resumo": "Manipula imagens e registros de vigilância digital." },
+      { "nome": "Passe Universal", "resumo": "Contorna fechaduras eletrônicas, alarmes e contramedidas digitais." },
+      { "nome": "Hack Financeiro", "resumo": "Manipula dados financeiros e movimentações de moeda." },
+      { "nome": "A Letra da Lei", "resumo": "Manipula registros criminais nacionais ou internacionais." }
+    ],
+    "Equipamento Improvisado": [
+      { "nome": "Frugal", "resumo": "Constrói itens mesmo em locais pobres em material, usando peças carregadas." },
+      { "nome": "Produção em Massa", "resumo": "Cria itens adicionais idênticos de acordo com a margem." },
+      { "nome": "Especialização", "resumo": "Aprimora uma Habilidade específica com bônus maior." },
+      { "nome": "Criação Veloz", "resumo": "Improvisa ferramentas mesmo sob tensão, como em conflito." }
+    ],
+    "Encantador de Feras": [
+      { "nome": "Incorruptível", "resumo": "O animal resiste a efeitos sobrenaturais que o afastariam do mestre." },
+      { "nome": "Zoológico", "resumo": "Adiciona outro tipo de animal ao conjunto disponível." },
+      { "nome": "Comandos Complexos", "resumo": "Permite ordens mais elaboradas e interpretação melhor da criatura." },
+      { "nome": "Incógnito", "resumo": "O animal se esconde e permanece fora de vista com maestria." }
+    ],
+    "Jóquei de Drones": [
+      { "nome": "Autônomo", "resumo": "Programa comportamentos simples em modo automático." },
+      { "nome": "Variantes", "resumo": "Adquire um modelo adicional de drone." },
+      { "nome": "Habilidade Especializada", "resumo": "O drone recebe uma Habilidade adicional ou ferramenta especial." },
+      { "nome": "Armamentos", "resumo": "Uma variante pode carregar armamento simples." },
+      { "nome": "Carga", "resumo": "O drone transporta carga muito acima do esperado para seu tamanho." }
+    ],
+    "Arsenal": [
+      { "nome": "Requisição Coletiva", "resumo": "Fornece cópias adicionais da mesma arma." },
+      { "nome": "Características Especiais", "resumo": "Acrescenta propriedades especiais à arma obtida." },
+      { "nome": "Exóticas", "resumo": "Permite armas ou munições raras e personalizadas." },
+      { "nome": "Irrastreável", "resumo": "As armas obtidas não levam autoridades ou presas até os Caçadores." }
+    ],
+    "Artilharia": [
+      { "nome": "Cargas Múltiplas", "resumo": "Fornece cópias adicionais do mesmo explosivo." },
+      { "nome": "Munição Não Letal", "resumo": "Fornece granadas, gases ou outras cargas incapacitantes." },
+      { "nome": "Exóticas", "resumo": "Permite substâncias raras ou personalizadas contra vulnerabilidades da presa." },
+      { "nome": "Entrega Disfarçada", "resumo": "Disfarça dispositivos explosivos como objetos cotidianos." }
+    ],
+    "Biblioteca": [
+      { "nome": "Onde Eles Se Escondem", "resumo": "A pesquisa ajuda a localizar o covil da presa." },
+      { "nome": "Quem Eles São", "resumo": "A pesquisa ajuda a identificar a presa disfarçada." },
+      { "nome": "Como Detê-los", "resumo": "A pesquisa ajuda a proteger uma área ou pessoa da presa." },
+      { "nome": "Como Feri-los", "resumo": "A pesquisa ajuda a explorar fraquezas sobrenaturais." }
+    ],
+    "Frota": [
+      { "nome": "Armadura", "resumo": "Veículos fornecidos são blindados contra armas leves." },
+      { "nome": "Desempenho", "resumo": "Veículos têm condução e manobrabilidade superiores." },
+      { "nome": "Vigilância", "resumo": "Veículo traz instrumentos ocultos para tocaia e espionagem." },
+      { "nome": "Irrastreável", "resumo": "Veículos obtidos não levam autoridades ou presas até os Caçadores." }
+    ],
+    "Artefato": [
+      { "nome": "Fortalecer", "resumo": "Aumenta temporariamente o bônus do Artefato." },
+      { "nome": "Atração", "resumo": "O Artefato atrai forças sobrenaturais e pode servir como isca." },
+      { "nome": "Detecção", "resumo": "O Artefato reage à presença do sobrenatural." },
+      { "nome": "Escudo", "resumo": "Reduz dano físico causado por fontes sobrenaturais." }
+    ],
+    "Frustrar o Sobrenatural": [
+      { "nome": "Especialização em Criatura", "resumo": "Bônus contra um tipo específico de criatura." },
+      { "nome": "Guardar", "resumo": "Estende a proteção para uma área ao redor do Caçador." },
+      { "nome": "Conhecimento", "resumo": "Revela pistas sobre o poder resistido." },
+      { "nome": "Mãos Livres", "resumo": "Dispensa objeto de foco para usar o Trunfo." }
+    ],
+    "Repelir o Sobrenatural": [
+      { "nome": "Guardar", "resumo": "Estende a área protegida ao redor do Caçador." },
+      { "nome": "Ferir", "resumo": "Permite usar o foco como arma contra a criatura repelida." },
+      { "nome": "Especialização em Criatura", "resumo": "Bônus para repelir um tipo específico de criatura." },
+      { "nome": "Mãos Livres", "resumo": "Dispensa objeto de foco para usar o Trunfo." }
+    ],
+    "Sentir o Sobrenatural": [
+      { "nome": "Especialização em Criatura", "resumo": "Bônus para sentir um tipo específico de criatura." },
+      { "nome": "Alcance", "resumo": "Amplia a detecção para aproximadamente um quarteirão." },
+      { "nome": "Precisão", "resumo": "Indica exatamente quem no local é uma criatura sobrenatural." },
+      { "nome": "Mãos Livres", "resumo": "Dispensa objeto de foco para usar o Trunfo." }
+    ],
+    "Outro Trunfo aprovado": [
+      { "nome": "Distinção personalizada", "resumo": "Defina com o Narrador a Distinção ligada ao Trunfo personalizado." }
+    ]
+  }
+}

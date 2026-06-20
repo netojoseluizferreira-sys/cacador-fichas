@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Caçador: A Revanche 5ª Edição - Criador de Ficha</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topo">
+    <div>
+      <p class="eyebrow">Caçador: A Revanche - 5ª Edição</p>
+      <h1>Criador de Ficha</h1>
+    </div>
+
+    <div class="topo-acoes" id="topoAcoes" hidden>
+      <span class="auth-chip" id="authUsuario">Offline</span>
+      <button id="novaFicha" type="button">Nova ficha</button>
+      <button id="salvarFicha" type="button">Salvar online</button>
+      <button id="finalizarFicha" type="button">Finalizar</button>
+      <button id="abrirFichasOnline" type="button">Minhas fichas</button>
+      <button id="abrirAdmin" type="button" hidden>Admin</button>
+      <button id="loginEmailTopo" type="button">Entrar</button>
+      <button id="sairEmail" type="button" hidden>Sair</button>
+      <button id="exportarJson" type="button" hidden>Exportar JSON</button>
+      <button id="importarJsonBtn" type="button" hidden>Importar JSON</button>
+      <button id="exportarTxt" type="button">Exportar TXT</button>
+      <input type="file" id="importarJsonInput" accept=".json" hidden />
+    </div>
+  </header>
+
+  <main class="menu-tela" id="menuTela">
+    <section class="menu-card">
+      <div>
+        <p class="eyebrow">Menu</p>
+        <h2>O que você quer fazer?</h2>
+        <p>Entre com email para criar, salvar e carregar suas fichas online no banco PostgreSQL.</p>
+        <div class="auth-box">
+          <strong id="menuAuthStatus">Offline</strong>
+          <span id="menuAuthDetalhe">Configure o Supabase e use o link enviado por email para salvar fichas online.</span>
+        </div>
+      </div>
+
+      <label class="login-email">
+        Email
+        <input type="email" id="authEmailInput" placeholder="seu-email@exemplo.com" autocomplete="email" />
+      </label>
+
+      <div class="menu-acoes">
+        <button id="loginEmailMenu" type="button">Enviar link de acesso</button>
+        <button id="criarFichaMenu" type="button">Criar ficha</button>
+        <button id="importarFichaMenu" type="button">Minhas fichas</button>
+      </div>
+    </section>
+  </main>
+
+  <main class="container" id="appTela" hidden>
+    <section class="painel-status">
+      <div class="status-card xp-status">
+        <span class="status-label">Estado</span>
+        <strong id="estadoFicha">Em criação</strong>
+      </div>
+      <div class="status-card">
+        <span class="status-label">Caixinhas de Vitalidade</span>
+        <strong id="vitalidadeResumo">4</strong>
+      </div>
+      <div class="status-card">
+        <span class="status-label">Caixinhas de Força de Vontade</span>
+        <strong id="vontadeResumo">2</strong>
+      </div>
+      <div class="status-card">
+        <span class="status-label">XP disponível</span>
+        <strong id="xpDisponivelResumo">0</strong>
+      </div>
+    </section>
+
+    <nav class="abas" aria-label="Etapas da ficha">
+      <button class="aba ativa" type="button" data-step-target="identidade">Identidade</button>
+      <button class="aba" type="button" data-step-target="atributos">Atributos</button>
+      <button class="aba" type="button" data-step-target="habilidades">Habilidades</button>
+      <button class="aba" type="button" data-step-target="vantagens">Vantagens</button>
+      <button class="aba" type="button" data-step-target="trunfos">Trunfos</button>
+      <button class="aba" type="button" data-step-target="extras">Extras</button>
+      <button class="aba" type="button" data-step-target="dano">Danos</button>
+      <button class="aba" type="button" data-step-target="rolagem">Rolagem</button>
+      <button class="aba" type="button" data-step-target="xp">XP</button>
+      <button class="aba" type="button" data-step-target="preview">Prévia</button>
+      <button class="aba" type="button" data-step-target="admin">Admin</button>
+    </nav>
+
+    <section class="alerta" id="alertaTrava" hidden>
+      Ficha finalizada. A criação mecânica está bloqueada; use o painel de XP para evolução. A aba Extras continua editável.
+    </section>
+
+    <section class="card etapa ativa" data-step="identidade">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Identidade, Credo e Ímpeto</h2>
+          <p>Defina quem é o caçador, o que ele quer, por que caça e quem o mantém humano.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <label>Nome do Caçador <input type="text" id="nomePersonagem" data-field placeholder="Ex: Gabriel Ferraz" /></label>
+        <label>Jogador <input type="text" id="nomeJogador" data-field placeholder="Ex: Neto" /></label>
+        <label>Crônica <input type="text" id="cronica" data-field placeholder="Ex: Portas no Escuro" /></label>
+        <label>Narrador <input type="text" id="narrador" data-field placeholder="Ex: Mestre da mesa" /></label>
+        <label>Conceito <input type="text" id="conceito" data-field placeholder="Ex: Detetive obcecado" /></label>
+        <label>Célula <input type="text" id="celula" data-field placeholder="Ex: Célula São Leopoldo" /></label>
+        <label>Ambição <input type="text" id="ambicao" data-field placeholder="Objetivo concreto de longo prazo" /></label>
+        <label>Desejo <input type="text" id="desejo" data-field placeholder="Vontade imediata da sessão" /></label>
+      </div>
+
+      <div class="grid">
+        <label>
+          Credo
+          <select id="credo" data-field>
+            <option value="">Selecione</option>
+            <option>Clandestino</option>
+            <option>Devoto</option>
+            <option>Empreendedor</option>
+            <option>Inquisitivo</option>
+            <option>Marcial</option>
+          </select>
+        </label>
+
+        <label>
+          Ímpeto
+          <select id="impeto" data-field>
+            <option value="">Selecione</option>
+            <option>Curiosidade</option>
+            <option>Expiação</option>
+            <option>Ganância</option>
+            <option>Inveja</option>
+            <option>Juramento</option>
+            <option>Orgulho</option>
+            <option>Vingança</option>
+          </select>
+        </label>
+      </div>
+
+      <label>Descrição do Ímpeto <textarea id="descricaoImpeto" data-field placeholder="O que empurra esse Caçador contra o sobrenatural?"></textarea></label>
+
+      <div class="grid tres">
+        <label>Pilar 1 <input type="text" id="pilar1" data-field placeholder="Pessoa importante e vulnerável" /></label>
+        <label>Pilar 2 <input type="text" id="pilar2" data-field placeholder="Pessoa importante e vulnerável" /></label>
+        <label>Pilar 3 <input type="text" id="pilar3" data-field placeholder="Pessoa importante e vulnerável" /></label>
+      </div>
+    </section>
+
+    <section class="card etapa" data-step="atributos">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Atributos</h2>
+          <p>Distribuição inicial: um 4, três 3, quatro 2 e um 1.</p>
+        </div>
+        <div class="medidor" id="resumoAtributos"></div>
+      </div>
+      <div class="atributos" id="atributosContainer"></div>
+    </section>
+
+    <section class="card etapa" data-step="habilidades">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Habilidades</h2>
+          <p>Escolha uma distribuição e preencha exatamente a quantidade de níveis indicada.</p>
+        </div>
+        <label class="compacto">
+          Distribuição
+          <select id="distribuicaoHabilidades" data-field>
+            <option value="pau">Pau para toda obra: 1x3, 8x2, 10x1</option>
+            <option value="equilibrado">Equilibrado: 3x3, 5x2, 7x1</option>
+            <option value="especialista">Especialista: 1x4, 3x3, 3x2, 3x1</option>
+          </select>
+        </label>
+      </div>
+      <div class="medidor bloco" id="resumoHabilidades"></div>
+      <div class="atributos" id="habilidadesContainer"></div>
+
+      <div class="subcard">
+        <h3>Especializações</h3>
+        <div class="grid">
+          <label>Especialização gratuita <input type="text" id="especializacaoLivre" data-field placeholder="Ex: Armas de Fogo - Saque rápido" /></label>
+          <label>Ciência <input type="text" id="especializacaoCiencia" data-field placeholder="Obrigatória se Ciência tiver pontos" /></label>
+          <label>Acadêmicos <input type="text" id="especializacaoAcademicos" data-field placeholder="Obrigatória se Acadêmicos tiver pontos" /></label>
+          <label>Ofícios <input type="text" id="especializacaoOficios" data-field placeholder="Obrigatória se Ofícios tiver pontos" /></label>
+          <label>Performance <input type="text" id="especializacaoPerformance" data-field placeholder="Obrigatória se Performance tiver pontos" /></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card etapa" data-step="vantagens">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Vantagens e Defeitos</h2>
+          <p>Criação inicial: 7 pontos de Vantagens e 2 pontos de Defeitos.</p>
+        </div>
+        <div class="medidor" id="resumoVantagens"></div>
+      </div>
+
+      <div class="duas-colunas">
+        <div class="subcard">
+          <h3>Adicionar Vantagem</h3>
+          <div class="linha-adicao">
+            <select id="vantagemSelect"></select>
+            <input type="number" id="vantagemPontos" min="1" max="5" value="1" aria-label="Pontos da vantagem" />
+            <input type="text" id="vantagemDetalhe" placeholder="Detalhe: pessoa, lugar, facção..." />
+            <button id="adicionarVantagem" type="button">Adicionar</button>
+          </div>
+          <p class="catalogo-descricao" id="vantagemDescricao"></p>
+          <div class="lista-selecionada" id="listaVantagens"></div>
+        </div>
+
+        <div class="subcard">
+          <h3>Adicionar Defeito</h3>
+          <div class="linha-adicao">
+            <select id="defeitoSelect"></select>
+            <input type="number" id="defeitoPontos" min="1" max="5" value="1" aria-label="Pontos do defeito" />
+            <input type="text" id="defeitoDetalhe" placeholder="Detalhe: inimigo, segredo, dívida..." />
+            <button id="adicionarDefeito" type="button">Adicionar</button>
+          </div>
+          <p class="catalogo-descricao" id="defeitoDescricao"></p>
+          <div class="lista-selecionada" id="listaDefeitos"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card etapa" data-step="trunfos">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Trunfos e Distinções</h2>
+          <p>Escolha dois Trunfos, ou um Trunfo e duas Distinções.</p>
+        </div>
+        <div class="medidor" id="resumoTrunfos"></div>
+      </div>
+
+      <div class="duas-colunas">
+        <div class="subcard">
+          <h3>Trunfos</h3>
+          <div class="linha-adicao">
+            <select id="trunfoSelect"></select>
+            <input type="text" id="trunfoDetalhe" placeholder="Forma na ficção, ferramenta ou origem" />
+            <button id="adicionarTrunfo" type="button">Adicionar</button>
+          </div>
+          <p class="catalogo-descricao" id="trunfoDescricao"></p>
+          <div class="lista-selecionada" id="listaTrunfos"></div>
+        </div>
+
+        <div class="subcard">
+          <h3>Distinções</h3>
+          <div class="linha-adicao">
+            <select id="distincaoSelect"></select>
+            <input type="text" id="distincaoDetalhe" placeholder="Detalhe, criatura, habilidade ou forma específica" />
+            <button id="adicionarDistincao" type="button">Adicionar</button>
+          </div>
+          <p class="catalogo-descricao" id="distincaoDescricao"></p>
+          <div class="lista-selecionada" id="listaDistincoes"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card etapa" data-step="extras">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Equipamento, Caçada e Relações</h2>
+          <p>Campos de apoio para mesa e exportação da ficha.</p>
+        </div>
+      </div>
+
+      <label>Mapa de Relacionamentos <textarea id="mapaRelacionamentos" data-field placeholder="Célula, pilares, aliados, contatos, inimigos, presas, orgs e tensões."></textarea></label>
+      <div class="grid">
+        <label>Equipamentos <textarea id="equipamentos" data-field placeholder="Lanterna, gravador, carro, notebook, dossiês..."></textarea></label>
+        <label>Armas <textarea id="armas" data-field placeholder="Revólver, faca, bastão, espingarda, taser..."></textarea></label>
+      </div>
+      <div class="grid">
+        <label>Presa <input type="text" id="presa" data-field placeholder="Alvo sobrenatural ou ameaça atual" /></label>
+        <label>Local da Caçada <input type="text" id="localCacada" data-field placeholder="Hotel abandonado, docas, hospital..." /></label>
+      </div>
+      <div class="grid">
+        <label>Pistas e Descobertas <textarea id="pistas" data-field></textarea></label>
+        <label>Consequências <textarea id="consequencias" data-field></textarea></label>
+      </div>
+      <label>Anotações <textarea id="anotacoes" data-field></textarea></label>
+    </section>
+
+    <section class="card etapa" data-step="xp">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Experiência</h2>
+          <p>Depois de finalizar a ficha, registre XP e aplique avanços pelo custo do livro.</p>
+        </div>
+        <div class="medidor" id="resumoXp"></div>
+      </div>
+
+      <div class="duas-colunas">
+        <div class="subcard">
+          <h3>Ganhar XP</h3>
+          <div class="grid">
+            <label>
+              Situação
+              <select id="xpSituacao">
+                <option value="1">Participação na sessão (1)</option>
+                <option value="1">Realização notável ou momento marcante (1)</option>
+                <option value="1">Uso inteligente de Característica, Habilidade ou Trunfo (1)</option>
+                <option value="2">Sessão padrão baixa (2)</option>
+                <option value="4">Sessão padrão alta (4)</option>
+                <option value="6">Jornada acelerada (6)</option>
+                <option value="8">Jornada acelerada intensa (8)</option>
+                <option value="2">Concluir história da crônica (2)</option>
+                <option value="3">Concluir história decisiva (3)</option>
+                <option value="custom">Personalizado</option>
+              </select>
+            </label>
+            <label>Quantidade <input type="number" id="xpGanhoQuantidade" min="1" value="1" /></label>
+          </div>
+          <label>Observação <input type="text" id="xpGanhoObs" placeholder="Ex: sessão 03, confronto no necrotério" /></label>
+          <button id="adicionarXp" type="button">Registrar XP</button>
+        </div>
+
+        <div class="subcard">
+          <h3>Gastar XP</h3>
+          <div class="grid">
+            <label>
+              Avanço
+              <select id="xpTipoGasto">
+                <option value="atributo">Atributo: novo nível x 5</option>
+                <option value="habilidade">Habilidade: novo nível x 3</option>
+                <option value="especializacao">Especialização: 3</option>
+                <option value="trunfo">Novo Trunfo: 6</option>
+                <option value="distincao">Distinção: 3</option>
+                <option value="vantagem">Vantagem: 3 por ponto</option>
+              </select>
+            </label>
+            <label>Alvo <select id="xpAlvo"></select></label>
+          </div>
+          <div class="grid">
+            <label>Nome ou detalhe <input type="text" id="xpGastoDetalhe" placeholder="Obrigatório para especializações, trunfos e vantagens" /></label>
+            <label>Pontos <input type="number" id="xpGastoPontos" min="1" max="5" value="1" /></label>
+          </div>
+          <div class="custo-xp" id="xpCustoCalculado">Custo: 0 XP</div>
+          <button id="gastarXp" type="button">Aplicar avanço</button>
+        </div>
+      </div>
+
+      <div class="subcard">
+        <h3>Histórico</h3>
+        <div class="historico" id="historicoXp"></div>
+      </div>
+    </section>
+
+    <section class="card etapa" data-step="dano">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Danos e Recuperação</h2>
+          <p>Controle as caixinhas da ficha finalizada: / para dano superficial e X para dano agravado.</p>
+        </div>
+      </div>
+
+      <div class="subcard">
+        <h3>Começo de sessão</h3>
+        <p class="aviso" id="danoResumoSessao">Recupera dano superficial de Vitalidade igual a Vigor e de Força de Vontade igual ao maior valor entre Autocontrole e Determinação.</p>
+        <button id="comecarSessao" type="button">Começar sessão</button>
+      </div>
+
+      <div class="duas-colunas">
+        <div class="subcard">
+          <h3>Caixinhas de Vitalidade</h3>
+          <div class="trilha-dano" id="vitalidadeCaixas"></div>
+          <div class="dano-estado" id="vitalidadeEstado"></div>
+
+          <div class="grid">
+            <label>
+              Dano recebido
+              <input type="number" id="danoVitalidadeQuantidade" min="1" value="1" />
+            </label>
+            <label>
+              Tipo
+              <select id="danoVitalidadeTipo">
+                <option value="superficial">Superficial</option>
+                <option value="agravado">Agravado</option>
+              </select>
+            </label>
+          </div>
+          <button id="aplicarDanoVitalidade" type="button">Aplicar dano</button>
+          <button class="secundario" id="curarAgravadoVitalidade" type="button">Medicina: agravado vira superficial</button>
+          <p class="aviso" id="medicinaResumo">Medicina converte dano agravado de Vitalidade após teste bem-sucedido.</p>
+        </div>
+
+        <div class="subcard">
+          <h3>Caixinhas de Força de Vontade</h3>
+          <div class="trilha-dano" id="vontadeCaixas"></div>
+          <div class="dano-estado" id="vontadeEstado"></div>
+
+          <div class="grid">
+            <label>
+              Dano recebido
+              <input type="number" id="danoVontadeQuantidade" min="1" value="1" />
+            </label>
+            <label>
+              Tipo
+              <select id="danoVontadeTipo">
+                <option value="superficial">Superficial</option>
+                <option value="agravado">Agravado</option>
+              </select>
+            </label>
+          </div>
+          <button id="aplicarDanoVontade" type="button">Aplicar dano</button>
+          <p class="aviso">Dano agravado de Força de Vontade não é curado por Medicina; o livro trata recuperação por Ambição ou circunstâncias narrativas.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card etapa" data-step="rolagem">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Rolagem de Dados</h2>
+          <p>Monte a parada, some bônus extras e role os dados da ficha finalizada.</p>
+        </div>
+      </div>
+
+      <div class="subcard">
+        <h3>Parada</h3>
+        <div class="grid">
+          <label>
+            Tipo de rolagem
+            <select id="rolagemTipo">
+              <option value="atributoHabilidade">Atributo + Habilidade</option>
+              <option value="atributoAtributo">Atributo + Atributo</option>
+              <option value="vitalidade">Vitalidade</option>
+              <option value="vontade">Força de Vontade</option>
+            </select>
+          </label>
+
+          <label>
+            Outros bônus
+            <input type="number" id="rolagemBonus" value="0" />
+          </label>
+        </div>
+
+        <div class="grid" id="rolagemSeletores">
+          <label id="rolagemAtributo1Box">
+            Atributo
+            <select id="rolagemAtributo1"></select>
+          </label>
+
+          <label id="rolagemHabilidadeBox">
+            Habilidade
+            <select id="rolagemHabilidade"></select>
+          </label>
+
+          <label id="rolagemAtributo2Box">
+            Segundo Atributo
+            <select id="rolagemAtributo2"></select>
+          </label>
+        </div>
+
+        <div class="custo-xp" id="rolagemResumo">Parada: 0 dados</div>
+        <button id="rolarDados" type="button">Rolar dados</button>
+      </div>
+
+      <div class="subcard">
+        <h3>Resultados</h3>
+        <div class="historico rolagem-historico" id="historicoRolagens">
+          <div>Nenhuma rolagem ainda.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card etapa" data-step="preview">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Prévia da Ficha</h2>
+          <p>Resumo pronto para salvar, exportar ou consultar durante a mesa.</p>
+        </div>
+      </div>
+      <div class="validacao" id="validacaoFicha"></div>
+      <pre id="previewFicha"></pre>
+    </section>
+
+    <section class="card etapa" data-step="admin">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Administrador</h2>
+          <p>Consulta das fichas salvas no banco de dados.</p>
+        </div>
+        <button id="atualizarAdmin" type="button">Atualizar</button>
+      </div>
+
+      <div class="subcard">
+        <h3>Fichas no banco</h3>
+        <div class="historico fichas-online" id="adminFichasLista">
+          <div>Entre com a conta administradora para ver as fichas.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="modal" id="fichasOnlineModal" hidden>
+    <div class="modal-conteudo">
+      <div class="cabecalho-card">
+        <div>
+          <h2>Minhas fichas</h2>
+          <p>Carregue uma ficha salva no banco online.</p>
+        </div>
+        <button class="secundario" id="fecharFichasOnline" type="button">Fechar</button>
+      </div>
+      <div class="historico fichas-online" id="fichasOnlineLista">
+        <div>Nenhuma ficha carregada.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Ficha web pessoal para Caçador: A Revanche</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

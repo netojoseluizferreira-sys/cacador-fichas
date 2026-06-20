@@ -1603,28 +1603,32 @@ function comecarSessao() {
   alert(`Comeco de sessao: ${vitalidade} dano(s) superficial(is) de Vitalidade e ${vontade} de Forca de Vontade recuperado(s).`);
 }
 
-function curarAgravadoVitalidade() {
+function converterAgravadoEmSuperficial(trilha) {
   if (!state.finalizada) {
     alert("Finalize ou importe uma ficha antes de curar dano.");
-    return;
+    return false;
   }
 
-  if (valor("medicina") <= 0) {
-    alert("Medicina 0 nao permite converter dano agravado por tratamento.");
-    return;
-  }
-
-  const caixas = normalizarDanoTrilha("vitalidade");
+  const caixas = normalizarDanoTrilha(trilha);
   const agravado = caixas.findIndex((item) => item === "X");
   if (agravado === -1) {
-    alert("Nao ha dano agravado de Vitalidade para converter.");
-    return;
+    alert(`Nao ha dano agravado de ${nomeTrilha(trilha)} para converter.`);
+    return false;
   }
 
   caixas[agravado] = "/";
   renderDano();
   atualizarControlesRolagem();
   autoSalvar();
+  return true;
+}
+
+function curarAgravadoVitalidade() {
+  converterAgravadoEmSuperficial("vitalidade");
+}
+
+function curarAgravadoVontade() {
+  converterAgravadoEmSuperficial("vontade");
 }
 
 function resumoDanoTexto(trilha) {
@@ -1662,7 +1666,7 @@ function renderDano() {
   renderTrilhaDano("vontade", "vontadeCaixas", "vontadeEstado");
 
   $("danoResumoSessao").textContent = `Comeco de sessao: recupera ate ${valor("vigor")} superficial de Vitalidade e ate ${maiorRecuperacaoVontade()} superficial de Forca de Vontade.`;
-  $("medicinaResumo").textContent = `Medicina: apos teste de Inteligencia + Medicina, a dificuldade e o dano agravado total do paciente; limite de conversao por tratamento: ${Math.ceil(valor("medicina") / 2)}.`;
+  $("medicinaResumo").textContent = "Medicina: clique no botao quando o tratamento permitir converter 1 dano agravado de Vitalidade em superficial.";
 
   document.querySelectorAll("[data-dano-trilha]").forEach((botao) => {
     botao.addEventListener("click", () => alternarCaixaDano(botao.dataset.danoTrilha, Number(botao.dataset.danoIndex)));
@@ -2264,6 +2268,7 @@ function inicializarEventos() {
   $("aplicarDanoVontade").addEventListener("click", () => aplicarDano("vontade"));
   $("comecarSessao").addEventListener("click", comecarSessao);
   $("curarAgravadoVitalidade").addEventListener("click", curarAgravadoVitalidade);
+  $("curarAgravadoVontade").addEventListener("click", curarAgravadoVontade);
 }
 
 function ajustarPontosPorCatalogo(tipo) {

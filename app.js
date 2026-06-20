@@ -125,7 +125,8 @@ let subgruposCronica = [];
 let valoresGrupoCronica = {
   desespero: 0,
   perigo: 0,
-  nome: ""
+  nome: "",
+  id: ""
 };
 
 const idsCamposTexto = [
@@ -887,7 +888,7 @@ async function excluirSubgrupoCronica(id) {
 }
 
 async function carregarValoresCronicaDaFicha() {
-  valoresGrupoCronica = { desespero: 0, perigo: 0, nome: "" };
+  valoresGrupoCronica = { desespero: 0, perigo: 0, nome: "", id: "" };
   if (!supabaseClient || !authUser || !fichaAtualId) {
     atualizarMedidores();
     return;
@@ -895,7 +896,7 @@ async function carregarValoresCronicaDaFicha() {
 
   const { data, error } = await supabaseClient
     .from("cronica_subgrupos")
-    .select("nome,desespero,perigo,ficha_ids")
+    .select("id,nome,desespero,perigo,ficha_ids")
     .contains("ficha_ids", [fichaAtualId])
     .limit(1)
     .maybeSingle();
@@ -904,7 +905,8 @@ async function carregarValoresCronicaDaFicha() {
     valoresGrupoCronica = {
       desespero: Number(data.desespero || 0),
       perigo: Number(data.perigo || 0),
-      nome: data.nome || ""
+      nome: data.nome || "",
+      id: data.id || ""
     };
   }
 
@@ -925,6 +927,26 @@ function resultadoRolagem(dados) {
     sucessosExtras,
     sucessos: sucessosBase + sucessosExtras,
     critico: paresDez > 0
+  };
+}
+
+function criarIdRolagem() {
+  return window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function resultadoImpeto(dadosNormais, dadosDesespero, dificuldade) {
+  const resultadoTotal = resultadoRolagem([...dadosNormais, ...dadosDesespero]);
+  const desesperoOnes = dadosDesespero.filter((dado) => dado === 1).length;
+  const vitoria = resultadoTotal.sucessos >= dificuldade;
+  return {
+    ...resultadoTotal,
+    dados: dadosNormais,
+    dadosDesespero,
+    desesperoOnes,
+    dificuldade,
+    vitoria,
+    forcarBarra: desesperoOnes > 0 && vitoria,
+    aflicao: desesperoOnes > 0 && !vitoria
   };
 }
 
@@ -1421,7 +1443,7 @@ function iniciarCriacao() {
   localStorage.removeItem(LEGACY_KEY);
   fichaAtualId = null;
   adminEditandoFicha = false;
-  valoresGrupoCronica = { desespero: 0, perigo: 0, nome: "" };
+  valoresGrupoCronica = { desespero: 0, perigo: 0, nome: "", id: "" };
   resetarFicha();
   mostrarApp("criacao", "identidade");
   atualizarTudo();
@@ -2278,7 +2300,8 @@ function atualizarControlesRolagem() {
   $("rolagemAtributo1Box").hidden = !usaAtributo;
   $("rolagemHabilidadeBox").hidden = !usaHabilidade;
   $("rolagemAtributo2Box").hidden = !usaSegundoAtributo;
-  $("rolagemResumo").textContent = `Parada: ${parada.total} dados - ${parada.descricao}`;
+  const impeto = $("usarImpeto").checked ? ` + ${valoresGrupoCronica.desespero} Dado(s) de Desespero` : "";
+  $("rolagemResumo").textContent = `Parada: ${parada.total} dados${impeto} - ${parada.descricao}`;
 }
 
 function textoTipoRolagem(tipo) {
@@ -2286,12 +2309,13 @@ function textoTipoRolagem(tipo) {
     atributoHabilidade: "Atributo + Habilidade",
     atributoAtributo: "Atributo + Atributo",
     vitalidade: "Vitalidade",
-    vontade: "Forca de Vontade"
+    vontade: "Forca de Vontade",
+    impeto: "Ímpeto"
   };
   return nomes[tipo] || "Rolagem";
 }
 
-function rolarDados() {
+function rolarDados(usarImpeto = false) {
   if (!state.finalizada) {
     alert("Finalize ou importe uma ficha antes de rolar dados.");
     return;
@@ -2303,14 +2327,31 @@ function rolarDados() {
     return;
   }
 
-  const dados = Array.from({ length: parada.total }, () => Math.floor(Math.random() * 10) + 1);
-  const resultado = resultadoRolagem(dados);
+  if (usarImpeto && !$("usarImpeto").checked) {
+    alert("Marque a caixinha Usar Ímpeto antes de rolar com Ímpeto.");
+    return;
+  }
+
+  const dadosNormais = Array.from({ length: parada.total }, () => Math.floor(Math.random() * 10) + 1);
+  const dadosDesespero = usarImpeto
+    ? Array.from({ length: Math.max(0, valoresGrupoCronica.desespero) }, () => Math.floor(Math.random() * 10) + 1)
+    : [];
+  const dificuldade = Math.max(1, valor("rolagemDificuldade"));
+  const resultado = usarImpeto
+    ? resultadoImpeto(dadosNormais, dadosDesespero, dificuldade)
+    : resultadoRolagem(dadosNormais);
 
   state.rolagens.push({
+    id: criarIdRolagem(),
     data: new Date().toISOString(),
-    tipo: parada.tipo,
-    descricao: parada.descricao,
-    totalDados: parada.total,
+    tipo: usarImpeto ? "impeto" : parada.tipo,
+    tipoBase: parada.tipo,
+    descricao: usarImpeto ? `${parada.descricao} + Ímpeto (${valoresGrupoCronica.desespero} Dado(s) de Desespero)` : parada.descricao,
+    totalDados: parada.total + dadosDesespero.length,
+    impeto: usarImpeto,
+    subgrupoId: valoresGrupoCronica.id,
+    subgrupoNome: valoresGrupoCronica.nome,
+    perigoIncrementado: false,
     ...resultado
   });
 
@@ -2330,23 +2371,78 @@ function renderRolagens() {
   $("historicoRolagens").innerHTML = state.rolagens.length
     ? state.rolagens.slice().reverse().map((item) => {
       const dados = Array.isArray(item.dados) ? item.dados : [];
+      const dadosDesespero = Array.isArray(item.dadosDesespero) ? item.dadosDesespero : [];
       const sucessos = Number(item.sucessos || 0);
       const sucessosBase = Number(item.sucessosBase || 0);
       const sucessosExtras = Number(item.sucessosExtras || 0);
       const totalDados = Number(item.totalDados || dados.length);
-      const resultado = sucessos > 0 ? "sucesso" : "falha";
+      const resultado = item.impeto && item.dificuldade
+        ? sucessos >= Number(item.dificuldade) ? "vitória" : "falha"
+        : sucessos > 0 ? "sucesso" : "falha";
       const critico = item.critico ? "sim" : "nao";
+      const avisoImpeto = textoAvisoImpeto(item);
       return `
         <div>
           <strong>${escaparHtml(textoTipoRolagem(item.tipo))}</strong>
           <span>${escaparHtml(formatarDataRolagem(item.data))}</span>
           <span>${escaparHtml(item.descricao || "Rolagem")} - ${totalDados} dado(s)</span>
           <span>Dados: ${dados.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"}</span>
-          <span>Sucessos: <strong>${sucessos}</strong> (${sucessosBase} em 6+, +${sucessosExtras} por pares de 10) - Critico: ${critico} - Resultado: ${resultado}</span>
+          ${item.impeto ? `<span>Dados de Desespero: ${dadosDesespero.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"} (${Number(item.desesperoOnes || 0)} resultado(s) 1)</span>` : ""}
+          <span>Sucessos: <strong>${sucessos}</strong> (${sucessosBase} em 6+, +${sucessosExtras} por pares de 10) - Critico: ${critico} - Resultado: ${resultado}${item.dificuldade ? ` contra dificuldade ${Number(item.dificuldade)}` : ""}</span>
+          ${avisoImpeto}
         </div>
       `;
     }).join("")
     : "<div>Nenhuma rolagem ainda.</div>";
+
+  document.querySelectorAll("[data-aumentar-perigo]").forEach((botao) => {
+    botao.addEventListener("click", () => aumentarPerigoPorImpeto(botao.dataset.aumentarPerigo));
+  });
+}
+
+function textoAvisoImpeto(item) {
+  if (!item.impeto || !Number(item.desesperoOnes || 0)) {
+    return "";
+  }
+
+  const incremento = Number(item.desesperoOnes || 0);
+  if (item.aflicao) {
+    return `<span><strong>Falha crítica/Aflição:</strong> o teste falha e o Caçador não pode usar Dados de Desespero até se redimir pelo Ímpeto.</span>`;
+  }
+
+  const botao = item.subgrupoId && !item.perigoIncrementado
+    ? `<button class="secundario" type="button" data-aumentar-perigo="${item.id}">Aumentar Perigo +${incremento}</button>`
+    : item.perigoIncrementado ? "<span>Perigo do subgrupo já foi aumentado.</span>" : "";
+
+  return `
+    <span><strong>1 em Dado de Desespero:</strong> escolha manter a vitória e aumentar Perigo em +${incremento}, ou tratar o teste como falha e entrar em Aflição.</span>
+    ${botao}
+  `;
+}
+
+async function aumentarPerigoPorImpeto(rolagemId) {
+  const item = state.rolagens.find((rolagem) => rolagem.id === rolagemId);
+  if (!item || !item.subgrupoId) {
+    alert("NÃ£o foi possÃ­vel identificar o subgrupo desta rolagem.");
+    return;
+  }
+
+  const incremento = Math.max(1, Number(item.desesperoOnes || 1));
+  const { error } = await supabaseClient.rpc("aumentar_perigo_subgrupo", {
+    p_subgrupo_id: item.subgrupoId,
+    p_incremento: incremento
+  });
+
+  if (error) {
+    alert(`Erro ao aumentar Perigo: ${error.message}`);
+    return;
+  }
+
+  item.perigoIncrementado = true;
+  await carregarValoresCronicaDaFicha();
+  renderRolagens();
+  autoSalvar();
+  alert(`Perigo aumentado em +${incremento}.`);
 }
 
 function atualizarXpAlvos() {
@@ -2562,7 +2658,9 @@ function carregarFicha(ficha) {
   state.xpTotal = ficha.estados?.xpTotal || ficha.estados?.experiencia || 0;
   state.xpGasto = ficha.estados?.xpGasto || 0;
   state.xpLog = ficha.xpLog || [];
-  state.rolagens = Array.isArray(ficha.rolagens) ? ficha.rolagens : [];
+  state.rolagens = Array.isArray(ficha.rolagens)
+    ? ficha.rolagens.map((rolagem) => ({ id: rolagem.id || criarIdRolagem(), ...rolagem }))
+    : [];
   state.dano = {
     vitalidade: Array.isArray(ficha.dano?.vitalidade) ? ficha.dano.vitalidade : [],
     vontade: Array.isArray(ficha.dano?.vontade) ? ficha.dano.vontade : []
@@ -2782,7 +2880,10 @@ function inicializarEventos() {
   $("rolagemAtributo2").addEventListener("change", atualizarControlesRolagem);
   $("rolagemHabilidade").addEventListener("change", atualizarControlesRolagem);
   $("rolagemBonus").addEventListener("input", atualizarControlesRolagem);
-  $("rolarDados").addEventListener("click", rolarDados);
+  $("rolagemDificuldade").addEventListener("input", atualizarControlesRolagem);
+  $("usarImpeto").addEventListener("change", atualizarControlesRolagem);
+  $("rolarDados").addEventListener("click", () => rolarDados(false));
+  $("rolarImpeto").addEventListener("click", () => rolarDados(true));
   $("atualizarRolagensPublicas").addEventListener("click", atualizarRolagensPublicasCronica);
   $("aplicarDanoVitalidade").addEventListener("click", () => aplicarDano("vitalidade"));
   $("aplicarDanoVontade").addEventListener("click", () => aplicarDano("vontade"));

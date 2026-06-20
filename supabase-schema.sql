@@ -209,3 +209,34 @@ on public.cronica_subgrupos
 for delete
 to authenticated
 using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
+
+create or replace function public.aumentar_perigo_subgrupo(p_subgrupo_id uuid, p_incremento integer default 1)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_incremento integer := greatest(1, least(coalesce(p_incremento, 1), 10));
+begin
+  if not exists (
+    select 1
+    from public.cronica_subgrupos s
+    left join public.fichas f on f.id = any(s.ficha_ids)
+    where s.id = p_subgrupo_id
+      and (
+        f.user_id = auth.uid()
+        or auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com')
+      )
+  ) then
+    raise exception 'Sem permissao para aumentar o Perigo deste subgrupo.';
+  end if;
+
+  update public.cronica_subgrupos
+  set perigo = perigo + v_incremento
+  where id = p_subgrupo_id;
+end;
+$$;
+
+revoke all on function public.aumentar_perigo_subgrupo(uuid, integer) from public;
+grant execute on function public.aumentar_perigo_subgrupo(uuid, integer) to authenticated;

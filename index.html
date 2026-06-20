@@ -452,6 +452,11 @@
             Outros bônus
             <input type="number" id="rolagemBonus" value="0" />
           </label>
+
+          <label>
+            Dificuldade
+            <input type="number" id="rolagemDificuldade" min="1" value="1" />
+          </label>
         </div>
 
         <div class="grid" id="rolagemSeletores">
@@ -472,7 +477,12 @@
         </div>
 
         <div class="custo-xp" id="rolagemResumo">Parada: 0 dados</div>
+        <label class="ficha-cronica-toggle">
+          <input type="checkbox" id="usarImpeto" />
+          Usar Ímpeto
+        </label>
         <button id="rolarDados" type="button">Rolar dados</button>
+        <button class="secundario" id="rolarImpeto" type="button">Rolar com Ímpeto</button>
       </div>
 
       <div class="subcard">
@@ -601,7 +611,7 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js?v=20260620-2"></script>
-  <script src="app.js?v=20260620-2"></script>
+  <script src="supabase-config.js?v=20260620-3"></script>
+  <script src="app.js?v=20260620-3"></script>
 </body>
 </html>

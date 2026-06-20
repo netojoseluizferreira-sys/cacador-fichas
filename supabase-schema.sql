@@ -162,3 +162,50 @@ on public.rolagens_privadas
 for delete
 to authenticated
 using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
+
+create table if not exists public.cronica_subgrupos (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  ficha_ids uuid[] not null default '{}',
+  desespero integer not null default 0,
+  perigo integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists cronica_subgrupos_ficha_ids_idx on public.cronica_subgrupos using gin(ficha_ids);
+alter table public.cronica_subgrupos enable row level security;
+
+drop trigger if exists cronica_subgrupos_set_updated_at on public.cronica_subgrupos;
+create trigger cronica_subgrupos_set_updated_at
+before update on public.cronica_subgrupos
+for each row execute function public.set_updated_at();
+
+drop policy if exists "Todos autenticados leem subgrupos" on public.cronica_subgrupos;
+create policy "Todos autenticados leem subgrupos"
+on public.cronica_subgrupos
+for select
+to authenticated
+using (true);
+
+drop policy if exists "Apenas admin cria subgrupos" on public.cronica_subgrupos;
+create policy "Apenas admin cria subgrupos"
+on public.cronica_subgrupos
+for insert
+to authenticated
+with check (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
+
+drop policy if exists "Apenas admin edita subgrupos" on public.cronica_subgrupos;
+create policy "Apenas admin edita subgrupos"
+on public.cronica_subgrupos
+for update
+to authenticated
+using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'))
+with check (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
+
+drop policy if exists "Apenas admin apaga subgrupos" on public.cronica_subgrupos;
+create policy "Apenas admin apaga subgrupos"
+on public.cronica_subgrupos
+for delete
+to authenticated
+using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));

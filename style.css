@@ -154,12 +154,12 @@ body::before {
 
 .painel-status {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
 }
 
 .painel-status.sem-xp {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .status-card,
@@ -595,6 +595,23 @@ button.secundario {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
+}
+
+.subgrupo-membros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.subgrupo-membros label {
+  flex-direction: row;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.subgrupo-membros input {
+  width: auto;
 }
 
 .modal {

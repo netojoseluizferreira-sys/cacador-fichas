@@ -120,6 +120,13 @@ let mestreEstado = {
   iniciativa: [],
   turno: 0
 };
+let fichasAdminCache = [];
+let subgruposCronica = [];
+let valoresGrupoCronica = {
+  desespero: 0,
+  perigo: 0,
+  nome: ""
+};
 
 const idsCamposTexto = [
   "nomePersonagem",
@@ -578,6 +585,7 @@ async function carregarFichaOnline(id, opcoes = {}) {
   state.finalizada = Boolean(data.dados?.estado?.finalizada);
   mostrarApp(state.finalizada ? "gerenciar" : "criacao", state.finalizada ? "preview" : "identidade");
   fecharFichasOnline();
+  await carregarValoresCronicaDaFicha();
   autoSalvar();
 }
 
@@ -626,7 +634,10 @@ async function carregarEscudoMestre() {
 
   await carregarEstadoMestre();
   const lista = await buscarFichasOnline(true);
+  fichasAdminCache = lista;
   renderFichasEscudo(lista);
+  await carregarSubgruposCronica();
+  renderSubgruposCronica();
   renderIniciativa();
   preencher("mestreAnotacoes", mestreEstado.notas || "");
   await renderMestreRolagens();
@@ -738,6 +749,167 @@ async function alternarFichaCronica(id, selecionada) {
   }
   mestreEstado.ficha_ids = [...ids];
   await salvarEstadoMestre();
+  renderSubgruposCronica();
+}
+
+async function carregarSubgruposCronica() {
+  if (!supabaseClient || !authUser) {
+    subgruposCronica = [];
+    return [];
+  }
+
+  const { data, error } = await supabaseClient
+    .from("cronica_subgrupos")
+    .select("id,nome,ficha_ids,desespero,perigo,updated_at")
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    alert(`Erro ao carregar subgrupos: ${error.message}`);
+    subgruposCronica = [];
+    return [];
+  }
+
+  subgruposCronica = data || [];
+  return subgruposCronica;
+}
+
+function fichasSelecionadasCronica() {
+  const ids = new Set(mestreEstado.ficha_ids);
+  return fichasAdminCache.filter((ficha) => ids.has(ficha.id));
+}
+
+function renderSubgruposCronica() {
+  if (!usuarioEhAdmin()) {
+    return;
+  }
+
+  const fichas = fichasSelecionadasCronica();
+  $("subgruposLista").innerHTML = subgruposCronica.length
+    ? subgruposCronica.map((subgrupo) => `
+      <div>
+        <strong>${escaparHtml(subgrupo.nome)}</strong>
+        <span>Desespero: ${Number(subgrupo.desespero || 0)} - Perigo: ${Number(subgrupo.perigo || 0)}</span>
+        <div class="grid tres">
+          <label>Nome <input type="text" value="${escaparHtml(subgrupo.nome)}" data-subgrupo-nome="${subgrupo.id}" /></label>
+          <label>Desespero <input type="number" value="${Number(subgrupo.desespero || 0)}" data-subgrupo-desespero="${subgrupo.id}" /></label>
+          <label>Perigo <input type="number" value="${Number(subgrupo.perigo || 0)}" data-subgrupo-perigo="${subgrupo.id}" /></label>
+        </div>
+        <div class="subgrupo-membros">
+          ${fichas.map((ficha) => `
+            <label>
+              <input type="checkbox" data-subgrupo-membro="${subgrupo.id}" value="${ficha.id}" ${subgrupo.ficha_ids?.includes(ficha.id) ? "checked" : ""} />
+              ${escaparHtml(ficha.nome || "Ficha sem nome")}
+            </label>
+          `).join("") || "<span>Selecione fichas da crônica acima para adicionar membros.</span>"}
+        </div>
+        <div class="ficha-online-acoes">
+          <button type="button" data-salvar-subgrupo="${subgrupo.id}">Salvar subgrupo</button>
+          <button class="secundario" type="button" data-excluir-subgrupo="${subgrupo.id}">Excluir</button>
+        </div>
+      </div>
+    `).join("")
+    : "<div>Nenhum subgrupo criado.</div>";
+
+  document.querySelectorAll("[data-salvar-subgrupo]").forEach((botao) => {
+    botao.addEventListener("click", () => salvarSubgrupoCronica(botao.dataset.salvarSubgrupo));
+  });
+  document.querySelectorAll("[data-excluir-subgrupo]").forEach((botao) => {
+    botao.addEventListener("click", () => excluirSubgrupoCronica(botao.dataset.excluirSubgrupo));
+  });
+}
+
+async function criarSubgrupoCronica() {
+  if (!usuarioEhAdmin()) {
+    alert("Apenas o mestre admin pode criar subgrupos.");
+    return;
+  }
+
+  const nome = valor("subgrupoNome");
+  if (!nome) {
+    alert("Informe o nome do subgrupo.");
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("cronica_subgrupos")
+    .insert({
+      nome,
+      desespero: valor("subgrupoDesespero"),
+      perigo: valor("subgrupoPerigo"),
+      ficha_ids: []
+    });
+
+  if (error) {
+    alert(`Erro ao criar subgrupo: ${error.message}`);
+    return;
+  }
+
+  preencher("subgrupoNome", "");
+  preencher("subgrupoDesespero", 0);
+  preencher("subgrupoPerigo", 0);
+  await carregarSubgruposCronica();
+  renderSubgruposCronica();
+}
+
+async function salvarSubgrupoCronica(id) {
+  const nome = document.querySelector(`[data-subgrupo-nome="${id}"]`)?.value.trim() || "Subgrupo";
+  const desespero = Number(document.querySelector(`[data-subgrupo-desespero="${id}"]`)?.value || 0);
+  const perigo = Number(document.querySelector(`[data-subgrupo-perigo="${id}"]`)?.value || 0);
+  const ficha_ids = [...document.querySelectorAll(`[data-subgrupo-membro="${id}"]:checked`)].map((input) => input.value);
+
+  const { error } = await supabaseClient
+    .from("cronica_subgrupos")
+    .update({ nome, desespero, perigo, ficha_ids })
+    .eq("id", id);
+
+  if (error) {
+    alert(`Erro ao salvar subgrupo: ${error.message}`);
+    return;
+  }
+
+  await carregarSubgruposCronica();
+  renderSubgruposCronica();
+}
+
+async function excluirSubgrupoCronica(id) {
+  if (!confirm("Excluir este subgrupo?")) {
+    return;
+  }
+
+  const { error } = await supabaseClient.from("cronica_subgrupos").delete().eq("id", id);
+  if (error) {
+    alert(`Erro ao excluir subgrupo: ${error.message}`);
+    return;
+  }
+
+  await carregarSubgruposCronica();
+  renderSubgruposCronica();
+}
+
+async function carregarValoresCronicaDaFicha() {
+  valoresGrupoCronica = { desespero: 0, perigo: 0, nome: "" };
+  if (!supabaseClient || !authUser || !fichaAtualId) {
+    atualizarMedidores();
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("cronica_subgrupos")
+    .select("nome,desespero,perigo,ficha_ids")
+    .contains("ficha_ids", [fichaAtualId])
+    .limit(1)
+    .maybeSingle();
+
+  if (!error && data) {
+    valoresGrupoCronica = {
+      desespero: Number(data.desespero || 0),
+      perigo: Number(data.perigo || 0),
+      nome: data.nome || ""
+    };
+  }
+
+  atualizarMedidores();
+  atualizarPrevia();
 }
 
 function resultadoRolagem(dados) {
@@ -1130,7 +1302,7 @@ function contarPorValor(ids) {
 }
 
 function setEtapa(nomeEtapa) {
-  const etapasPermitidas = etapasPorModo[modoTela] || [];
+  const etapasPermitidas = etapasPermitidasAtuais();
   const etapaSolicitada = nomeEtapa === "admin" && !usuarioEhAdmin() ? "preview" : nomeEtapa;
   const etapaFinal = etapasPermitidas.includes(etapaSolicitada) ? etapaSolicitada : etapasPermitidas[0];
 
@@ -1149,7 +1321,7 @@ function setEtapa(nomeEtapa) {
 function atualizarModoInterface() {
   const noMenu = modoTela === "menu";
   const noAdmin = modoTela === "admin";
-  const etapasPermitidas = etapasPorModo[modoTela] || [];
+  const etapasPermitidas = etapasPermitidasAtuais();
   const ordemGerenciar = { preview: 1, dano: 2, rolagem: 3, xp: 4, extras: 5 };
 
   $("menuTela").hidden = !noMenu;
@@ -1190,7 +1362,15 @@ function mostrarMenu() {
 function mostrarApp(modo, etapaInicial) {
   modoTela = modo;
   atualizarModoInterface();
-  setEtapa(etapaInicial || etapasPorModo[modo][0]);
+  setEtapa(etapaInicial || etapasPermitidasAtuais()[0]);
+}
+
+function etapasPermitidasAtuais() {
+  if (adminEditandoFicha && modoTela === "gerenciar") {
+    return ["identidade", "atributos", "habilidades", "vantagens", "trunfos", "extras", "dano", "rolagem", "xp", "preview"];
+  }
+
+  return etapasPorModo[modoTela] || [];
 }
 
 function resetarFicha() {
@@ -1241,6 +1421,7 @@ function iniciarCriacao() {
   localStorage.removeItem(LEGACY_KEY);
   fichaAtualId = null;
   adminEditandoFicha = false;
+  valoresGrupoCronica = { desespero: 0, perigo: 0, nome: "" };
   resetarFicha();
   mostrarApp("criacao", "identidade");
   atualizarTudo();
@@ -1511,6 +1692,8 @@ function atualizarMedidores() {
   $("vitalidadeResumo").textContent = String(totalCaixasVitalidade());
   $("vontadeResumo").textContent = String(totalCaixasVontade());
   $("xpDisponivelResumo").textContent = String(xpDisponivel());
+  $("desesperoResumo").textContent = String(valoresGrupoCronica.desespero);
+  $("perigoResumo").textContent = String(valoresGrupoCronica.perigo);
   $("alertaTrava").hidden = !state.finalizada;
 }
 
@@ -1596,6 +1779,9 @@ function montarFicha() {
     estados: {
       vitalidadeCaixas: totalCaixasVitalidade(),
       forcaDeVontadeCaixas: totalCaixasVontade(),
+      desespero: valoresGrupoCronica.desespero,
+      perigo: valoresGrupoCronica.perigo,
+      subgrupoCronica: valoresGrupoCronica.nome,
       xpTotal: state.xpTotal,
       xpGasto: state.xpGasto,
       xpDisponivel: xpDisponivel()
@@ -1697,6 +1883,9 @@ Caixinhas de Vitalidade: ${ficha.estados.vitalidadeCaixas ?? ficha.estados.vital
 Caixinhas de Força de Vontade: ${ficha.estados.forcaDeVontadeCaixas ?? ficha.estados.forcaDeVontadeMaxima}
 Vitalidade atual: ${textoTrilhaDano(ficha.dano?.vitalidade)}
 Força de Vontade atual: ${textoTrilhaDano(ficha.dano?.vontade)}
+Subgrupo da crônica: ${ficha.estados.subgrupoCronica || "Nenhum"}
+Desespero: ${ficha.estados.desespero ?? 0}
+Perigo: ${ficha.estados.perigo ?? 0}
 
 HABILIDADES
 ${blocoGrupo("Físicas", ficha.habilidades.fisicas)}
@@ -2602,6 +2791,7 @@ function inicializarEventos() {
   $("curarAgravadoVontade").addEventListener("click", curarAgravadoVontade);
   $("mestreRolarDados").addEventListener("click", mestreRolarDados);
   $("salvarMestreAnotacoes").addEventListener("click", salvarMestreAnotacoes);
+  $("criarSubgrupo").addEventListener("click", criarSubgrupoCronica);
   $("adicionarIniciativa").addEventListener("click", adicionarIniciativa);
   $("proximoTurno").addEventListener("click", proximoTurno);
   $("limparIniciativa").addEventListener("click", limparIniciativa);

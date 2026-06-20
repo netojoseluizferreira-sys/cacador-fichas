@@ -27,6 +27,7 @@ O app usa Supabase para:
 - Escudo do Mestre com fichas da cronica, rolagens publicas/privadas, anotacoes e iniciativa.
 - O botao Admin aparece direto no menu quando a conta admin entra.
 - Ao editar uma ficha pelo Escudo, o admin pode alterar livremente a ficha do jogador e salvar no banco.
+- Subgrupos de cronica com valores de Desespero e Perigo visiveis nas fichas dos jogadores daquele subgrupo.
 
 Configure [supabase-config.js](./supabase-config.js):
 

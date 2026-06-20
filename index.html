@@ -20,7 +20,7 @@
       <button id="finalizarFicha" type="button">Finalizar</button>
       <button id="voltarMenuTopo" type="button">Menu</button>
       <button id="abrirFichasOnline" type="button">Minhas fichas</button>
-      <button id="abrirAdmin" type="button" hidden>Admin</button>
+      <button id="abrirAdmin" type="button" hidden>Escudo do Mestre</button>
       <button id="loginEmailTopo" type="button">Entrar</button>
       <button id="sairEmail" type="button" hidden>Sair</button>
       <button id="exportarJson" type="button" hidden>Exportar JSON</button>
@@ -55,7 +55,7 @@
       <div class="menu-acoes">
         <button id="loginEmailMenu" type="button">Entrar</button>
         <button id="criarContaEmail" type="button">Criar conta</button>
-        <button id="abrirAdminMenu" type="button" hidden>Admin</button>
+        <button id="abrirAdminMenu" type="button" hidden>Escudo do Mestre</button>
         <button id="criarFichaMenu" type="button">Criar ficha</button>
         <button id="importarFichaMenu" type="button">Minhas fichas</button>
       </div>
@@ -80,6 +80,14 @@
         <span class="status-label">XP disponível</span>
         <strong id="xpDisponivelResumo">0</strong>
       </div>
+      <div class="status-card">
+        <span class="status-label">Desespero</span>
+        <strong id="desesperoResumo">0</strong>
+      </div>
+      <div class="status-card">
+        <span class="status-label">Perigo</span>
+        <strong id="perigoResumo">0</strong>
+      </div>
     </section>
 
     <nav class="abas" aria-label="Etapas da ficha">
@@ -93,7 +101,7 @@
       <button class="aba" type="button" data-step-target="rolagem">Rolagem</button>
       <button class="aba" type="button" data-step-target="xp">XP</button>
       <button class="aba" type="button" data-step-target="preview">Prévia</button>
-      <button class="aba" type="button" data-step-target="admin">Admin</button>
+      <button class="aba" type="button" data-step-target="admin">Escudo</button>
     </nav>
 
     <section class="alerta" id="alertaTrava" hidden>
@@ -511,6 +519,19 @@
         <h3>Fichas da crônica</h3>
         <div class="historico fichas-online" id="adminFichasLista">
           <div>Entre com a conta administradora para ver as fichas.</div>
+        </div>
+      </div>
+
+      <div class="subcard">
+        <h3>Subgrupos, Desespero e Perigo</h3>
+        <div class="grid tres">
+          <label>Nome do subgrupo <input type="text" id="subgrupoNome" placeholder="Ex: Grupo no hospital" /></label>
+          <label>Desespero <input type="number" id="subgrupoDesespero" value="0" /></label>
+          <label>Perigo <input type="number" id="subgrupoPerigo" value="0" /></label>
+        </div>
+        <button id="criarSubgrupo" type="button">Criar subgrupo</button>
+        <div class="historico subgrupos-lista" id="subgruposLista">
+          <div>Nenhum subgrupo criado.</div>
         </div>
       </div>
 

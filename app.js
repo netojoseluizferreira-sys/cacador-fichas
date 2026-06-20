@@ -1,6 +1,7 @@
 const STORAGE_KEY = "ficha-cacador-a-revanche-5e-v2";
 const LEGACY_KEY = "ficha-cacador-a-revanche-5e";
 const ADMIN_EMAIL = "netojoseluizferreira@gmail.com";
+const ADMIN_EMAILS_EXTRA = ["netojoseluizferrreira@gmail.com"];
 
 const atributos = [
   {
@@ -103,7 +104,8 @@ const state = {
 
 const etapasPorModo = {
   criacao: ["identidade", "atributos", "habilidades", "vantagens", "trunfos", "extras", "preview"],
-  gerenciar: ["preview", "dano", "rolagem", "xp", "extras", "admin"]
+  gerenciar: ["preview", "dano", "rolagem", "xp", "extras"],
+  admin: ["admin"]
 };
 
 let modoTela = "menu";
@@ -111,6 +113,7 @@ let supabaseClient = null;
 let authUser = null;
 let fichaAtualId = null;
 let salvandoOnline = false;
+let adminEditandoFicha = false;
 let mestreEstado = {
   ficha_ids: [],
   notas: "",
@@ -169,7 +172,16 @@ function emailAdmin() {
 }
 
 function usuarioEhAdmin() {
-  return Boolean(authUser?.email && authUser.email.toLowerCase() === emailAdmin());
+  if (!authUser?.email) {
+    return false;
+  }
+
+  const email = authUser.email.toLowerCase();
+  return email === emailAdmin() || ADMIN_EMAILS_EXTRA.includes(email);
+}
+
+function fichaMecanicaTravada() {
+  return state.finalizada && !adminEditandoFicha;
 }
 
 function nomeFichaAtual(ficha = montarFicha()) {
@@ -440,12 +452,13 @@ function atualizarAuthInterface() {
   $("authSenhaInput").disabled = online;
   $("criarFichaMenu").disabled = !online;
   $("importarFichaMenu").disabled = !online;
-  $("salvarFicha").disabled = !online;
-  $("abrirFichasOnline").disabled = !online;
-  $("abrirAdmin").hidden = !admin;
+  $("abrirAdminMenu").hidden = !admin;
+  $("salvarFicha").disabled = !online || modoTela === "admin";
+  $("abrirFichasOnline").disabled = !online || modoTela === "admin";
+  $("abrirAdmin").hidden = !admin || modoTela === "admin";
 
   document.querySelectorAll('[data-step-target="admin"]').forEach((aba) => {
-    aba.hidden = !admin || modoTela !== "gerenciar";
+    aba.hidden = true;
   });
 }
 
@@ -543,7 +556,7 @@ function fecharFichasOnline() {
   $("fichasOnlineModal").hidden = true;
 }
 
-async function carregarFichaOnline(id) {
+async function carregarFichaOnline(id, opcoes = {}) {
   if (!exigirLogin()) {
     return;
   }
@@ -560,6 +573,7 @@ async function carregarFichaOnline(id) {
   }
 
   fichaAtualId = data.id;
+  adminEditandoFicha = Boolean(opcoes.adminEdit && usuarioEhAdmin());
   carregarFicha(data.dados);
   state.finalizada = Boolean(data.dados?.estado?.finalizada);
   mostrarApp(state.finalizada ? "gerenciar" : "criacao", state.finalizada ? "preview" : "identidade");
@@ -590,7 +604,8 @@ async function abrirAdmin() {
     return;
   }
 
-  mostrarApp("gerenciar", "admin");
+  adminEditandoFicha = false;
+  mostrarApp("admin", "admin");
   await atualizarAdmin();
 }
 
@@ -698,7 +713,7 @@ function renderFichasEscudo(lista) {
               <input type="checkbox" data-ficha-cronica="${ficha.id}" ${marcado} />
               Crônica
             </label>
-            <button type="button" data-carregar-online="${ficha.id}">Carregar</button>
+            <button type="button" data-editar-admin-ficha="${ficha.id}">Editar ficha</button>
           </div>
         </div>
       `;
@@ -709,8 +724,8 @@ function renderFichasEscudo(lista) {
     input.addEventListener("change", () => alternarFichaCronica(input.dataset.fichaCronica, input.checked));
   });
 
-  document.querySelectorAll("[data-carregar-online]").forEach((botao) => {
-    botao.addEventListener("click", () => carregarFichaOnline(botao.dataset.carregarOnline));
+  document.querySelectorAll("[data-editar-admin-ficha]").forEach((botao) => {
+    botao.addEventListener("click", () => carregarFichaOnline(botao.dataset.editarAdminFicha, { adminEdit: true }));
   });
 }
 
@@ -1133,12 +1148,15 @@ function setEtapa(nomeEtapa) {
 
 function atualizarModoInterface() {
   const noMenu = modoTela === "menu";
+  const noAdmin = modoTela === "admin";
   const etapasPermitidas = etapasPorModo[modoTela] || [];
-  const ordemGerenciar = { preview: 1, dano: 2, rolagem: 3, xp: 4, extras: 5, admin: 6 };
+  const ordemGerenciar = { preview: 1, dano: 2, rolagem: 3, xp: 4, extras: 5 };
 
   $("menuTela").hidden = !noMenu;
   $("appTela").hidden = noMenu;
   $("topoAcoes").hidden = noMenu;
+  document.querySelector(".painel-status").hidden = noMenu || noAdmin;
+  document.querySelector(".abas").hidden = noMenu || noAdmin;
 
   document.querySelectorAll(".aba").forEach((aba) => {
     const adminBloqueado = aba.dataset.stepTarget === "admin" && !usuarioEhAdmin();
@@ -1152,7 +1170,12 @@ function atualizarModoInterface() {
     etapa.hidden = !etapasPermitidas.includes(etapa.dataset.step) || adminBloqueado;
   });
 
+  $("novaFicha").hidden = noAdmin;
+  $("salvarFicha").hidden = noAdmin;
   $("finalizarFicha").hidden = modoTela !== "criacao";
+  $("abrirFichasOnline").hidden = noAdmin;
+  $("exportarTxt").hidden = noAdmin;
+  $("voltarMenuTopo").hidden = noMenu;
   document.querySelector(".xp-status").hidden = modoTela !== "gerenciar";
   document.querySelector(".painel-status").classList.toggle("sem-xp", modoTela !== "gerenciar");
   atualizarAuthInterface();
@@ -1160,6 +1183,7 @@ function atualizarModoInterface() {
 
 function mostrarMenu() {
   modoTela = "menu";
+  adminEditandoFicha = false;
   atualizarModoInterface();
 }
 
@@ -1216,6 +1240,7 @@ function iniciarCriacao() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(LEGACY_KEY);
   fichaAtualId = null;
+  adminEditandoFicha = false;
   resetarFicha();
   mostrarApp("criacao", "identidade");
   atualizarTudo();
@@ -1259,7 +1284,7 @@ function renderListas() {
 }
 
 function adicionarItem(tipo) {
-  if (state.finalizada && tipo !== "xp") {
+  if (fichaMecanicaTravada() && tipo !== "xp") {
     alert("Ficha finalizada. Use o painel de XP para alterar a ficha.");
     return;
   }
@@ -1270,7 +1295,7 @@ function adicionarItem(tipo) {
     if (pontos === null) {
       return;
     }
-    if (excedeLimiteCriacao("vantagem", pontos)) {
+    if (!adminEditandoFicha && excedeLimiteCriacao("vantagem", pontos)) {
       alert(`Vantagens nÃ£o podem passar de 7 pontos na criaÃ§Ã£o. Atual: ${totalPontos(state.vantagens)}, tentativa: +${pontos}.`);
       return;
     }
@@ -1284,7 +1309,7 @@ function adicionarItem(tipo) {
     if (pontos === null) {
       return;
     }
-    if (excedeLimiteCriacao("defeito", pontos)) {
+    if (!adminEditandoFicha && excedeLimiteCriacao("defeito", pontos)) {
       alert(`Defeitos nÃ£o podem passar de 2 pontos na criaÃ§Ã£o. Atual: ${totalPontos(state.defeitos)}, tentativa: +${pontos}.`);
       return;
     }
@@ -1293,12 +1318,12 @@ function adicionarItem(tipo) {
   }
 
   if (tipo === "trunfo") {
-    if (state.trunfos.length >= 2) {
+    if (!adminEditandoFicha && state.trunfos.length >= 2) {
       alert("Você já escolheu dois Trunfos. Remova um deles para trocar.");
       return;
     }
 
-    if (state.distincoes.length > 0) {
+    if (!adminEditandoFicha && state.distincoes.length > 0) {
       alert("Você escolheu o caminho de um Trunfo com Distinções. Remova as Distinções para pegar um segundo Trunfo.");
       return;
     }
@@ -1309,12 +1334,17 @@ function adicionarItem(tipo) {
   }
 
   if (tipo === "distincao") {
-    if (state.trunfos.length !== 1) {
+    if (state.trunfos.length < 1) {
+      alert("Adicione um Trunfo antes de adicionar DistinÃ§Ãµes.");
+      return;
+    }
+
+    if (!adminEditandoFicha && state.trunfos.length !== 1) {
       alert("Distinções só ficam disponíveis quando a ficha tem exatamente um Trunfo.");
       return;
     }
 
-    if (state.distincoes.length >= 2) {
+    if (!adminEditandoFicha && state.distincoes.length >= 2) {
       alert("A criação permite no máximo duas Distinções.");
       return;
     }
@@ -1341,7 +1371,7 @@ function adicionarItem(tipo) {
 }
 
 function removerItem(tipo, index) {
-  if (state.finalizada) {
+  if (fichaMecanicaTravada()) {
     alert("Ficha finalizada. Remoções só devem ocorrer criando nova ficha ou por ajuste narrativo do Narrador fora desta trava.");
     return;
   }
@@ -1497,10 +1527,10 @@ function atualizarControlesCatalogo() {
   const vantagemPassaLimite = excedeLimiteCriacao("vantagem", pontosSelecionadosPorTipo("vantagem"));
   const defeitoPassaLimite = excedeLimiteCriacao("defeito", pontosSelecionadosPorTipo("defeito"));
 
-  $("adicionarVantagem").disabled = state.finalizada || vantagemPassaLimite || totalPontos(state.vantagens) >= 7;
-  $("adicionarDefeito").disabled = state.finalizada || defeitoPassaLimite || totalPontos(state.defeitos) >= 2;
-  $("adicionarTrunfo").disabled = state.finalizada || state.trunfos.length >= 2 || caminhoComDistincoes;
-  $("distincaoSelect").disabled = state.finalizada || semTrunfoParaDistincao || caminhoDoisTrunfos || limiteDistincoes;
+  $("adicionarVantagem").disabled = fichaMecanicaTravada() || (!adminEditandoFicha && (vantagemPassaLimite || totalPontos(state.vantagens) >= 7));
+  $("adicionarDefeito").disabled = fichaMecanicaTravada() || (!adminEditandoFicha && (defeitoPassaLimite || totalPontos(state.defeitos) >= 2));
+  $("adicionarTrunfo").disabled = fichaMecanicaTravada() || (!adminEditandoFicha && (state.trunfos.length >= 2 || caminhoComDistincoes));
+  $("distincaoSelect").disabled = fichaMecanicaTravada() || (!adminEditandoFicha && (semTrunfoParaDistincao || caminhoDoisTrunfos || limiteDistincoes));
   $("distincaoDetalhe").disabled = $("distincaoSelect").disabled;
   $("adicionarDistincao").disabled = $("distincaoSelect").disabled;
 }
@@ -1520,7 +1550,7 @@ function atualizarValidacao() {
 }
 
 function atualizarTrava() {
-  const travar = state.finalizada;
+  const travar = fichaMecanicaTravada();
 
   document.querySelectorAll("[data-field]").forEach((campo) => {
     const ficaEmExtras = Boolean(campo.closest?.('[data-step="extras"]'));
@@ -1531,7 +1561,7 @@ function atualizarTrava() {
     $(id).disabled = travar;
   });
 
-  $("salvarFicha").disabled = !authUser;
+  $("salvarFicha").disabled = !authUser || modoTela === "admin";
   $("novaFicha").disabled = false;
   $("exportarJson").disabled = false;
   $("exportarTxt").disabled = false;
@@ -2516,6 +2546,7 @@ function inicializarEventos() {
   $("salvarFicha").addEventListener("click", salvarFicha);
   $("finalizarFicha").addEventListener("click", finalizarFicha);
   $("novaFicha").addEventListener("click", novaFicha);
+  $("voltarMenuTopo").addEventListener("click", mostrarMenu);
   $("criarFichaMenu").addEventListener("click", iniciarCriacao);
   $("importarFichaMenu").addEventListener("click", abrirFichasOnline);
   $("abrirFichasOnline").addEventListener("click", abrirFichasOnline);
@@ -2530,6 +2561,7 @@ function inicializarEventos() {
       loginEmail();
     }
   }));
+  $("abrirAdminMenu").addEventListener("click", abrirAdmin);
   $("abrirAdmin").addEventListener("click", abrirAdmin);
   $("atualizarAdmin").addEventListener("click", atualizarAdmin);
   $("exportarJson").addEventListener("click", exportarJSON);

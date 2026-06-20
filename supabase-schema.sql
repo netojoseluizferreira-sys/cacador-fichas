@@ -37,7 +37,7 @@ for select
 to authenticated
 using (
   user_id = auth.uid()
-  or auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com'
+  or auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com')
 );
 
 drop policy if exists "Usuários criam suas fichas" on public.fichas;
@@ -57,11 +57,11 @@ for update
 to authenticated
 using (
   user_id = auth.uid()
-  or auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com'
+  or auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com')
 )
 with check (
   user_id = auth.uid()
-  or auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com'
+  or auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com')
 );
 
 drop policy if exists "Usuários apagam suas fichas e admin apaga todas" on public.fichas;
@@ -71,7 +71,7 @@ for delete
 to authenticated
 using (
   user_id = auth.uid()
-  or auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com'
+  or auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com')
 );
 
 create table if not exists public.escudo_mestre (
@@ -96,8 +96,8 @@ create policy "Apenas admin gerencia escudo"
 on public.escudo_mestre
 for all
 to authenticated
-using (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com')
-with check (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'))
+with check (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
 
 create table if not exists public.rolagens_publicas (
   id uuid primary key default gen_random_uuid(),
@@ -122,14 +122,14 @@ create policy "Apenas admin cria rolagens publicas"
 on public.rolagens_publicas
 for insert
 to authenticated
-with check (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+with check (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
 
 drop policy if exists "Apenas admin apaga rolagens publicas" on public.rolagens_publicas;
 create policy "Apenas admin apaga rolagens publicas"
 on public.rolagens_publicas
 for delete
 to authenticated
-using (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
 
 create table if not exists public.rolagens_privadas (
   id uuid primary key default gen_random_uuid(),
@@ -147,18 +147,18 @@ create policy "Apenas admin le rolagens privadas"
 on public.rolagens_privadas
 for select
 to authenticated
-using (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
 
 drop policy if exists "Apenas admin cria rolagens privadas" on public.rolagens_privadas;
 create policy "Apenas admin cria rolagens privadas"
 on public.rolagens_privadas
 for insert
 to authenticated
-with check (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+with check (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
 
 drop policy if exists "Apenas admin apaga rolagens privadas" on public.rolagens_privadas;
 create policy "Apenas admin apaga rolagens privadas"
 on public.rolagens_privadas
 for delete
 to authenticated
-using (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));

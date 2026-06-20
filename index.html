@@ -34,10 +34,10 @@
       <div>
         <p class="eyebrow">Menu</p>
         <h2>O que você quer fazer?</h2>
-        <p>Entre com email para criar, salvar e carregar suas fichas online no banco PostgreSQL.</p>
+        <p>Entre com email e senha para criar, salvar e carregar suas fichas online no banco PostgreSQL.</p>
         <div class="auth-box">
           <strong id="menuAuthStatus">Offline</strong>
-          <span id="menuAuthDetalhe">Configure o Supabase e use o link enviado por email para salvar fichas online.</span>
+          <span id="menuAuthDetalhe">Configure o Supabase e entre com email e senha para salvar fichas online.</span>
         </div>
       </div>
 
@@ -46,8 +46,14 @@
         <input type="email" id="authEmailInput" placeholder="seu-email@exemplo.com" autocomplete="email" />
       </label>
 
+      <label class="login-email">
+        Senha
+        <input type="password" id="authSenhaInput" placeholder="Mínimo de 6 caracteres" autocomplete="current-password" />
+      </label>
+
       <div class="menu-acoes">
-        <button id="loginEmailMenu" type="button">Enviar link de acesso</button>
+        <button id="loginEmailMenu" type="button">Entrar</button>
+        <button id="criarContaEmail" type="button">Criar conta</button>
         <button id="criarFichaMenu" type="button">Criar ficha</button>
         <button id="importarFichaMenu" type="button">Minhas fichas</button>
       </div>

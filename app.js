@@ -178,18 +178,6 @@ function formatarDataCurta(data) {
   return dataObj.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-function urlRetornoAuth() {
-  const url = new URL(window.location.href);
-  url.search = "";
-  url.hash = "";
-
-  if (url.pathname.endsWith("/index.html")) {
-    url.pathname = url.pathname.replace(/index\.html$/, "");
-  }
-
-  return url.toString();
-}
-
 async function carregarCatalogo() {
   const resposta = await fetch("catalogo.json", { cache: "no-store" });
 
@@ -348,31 +336,66 @@ function exigirLogin() {
   return true;
 }
 
+function credenciaisAuth() {
+  const email = valor("authEmailInput");
+  const password = valor("authSenhaInput");
+
+  if (!email || !password) {
+    alert("Digite email e senha.");
+    return null;
+  }
+
+  if (password.length < 6) {
+    alert("A senha precisa ter pelo menos 6 caracteres.");
+    return null;
+  }
+
+  return { email, password };
+}
+
 async function loginEmail() {
   if (!supabaseClient) {
     alert("Supabase ainda nÃ£o estÃ¡ configurado. Preencha supabase-config.js.");
     return;
   }
 
-  const email = valor("authEmailInput");
-  if (!email) {
-    alert("Digite seu email para receber o link de acesso.");
+  const credenciais = credenciaisAuth();
+  if (!credenciais) {
     return;
   }
 
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: urlRetornoAuth()
-    }
-  });
+  const { data, error } = await supabaseClient.auth.signInWithPassword(credenciais);
 
   if (error) {
-    alert(`Erro ao enviar link: ${error.message}`);
+    alert(`Erro ao entrar: ${error.message}`);
     return;
   }
 
-  alert("Link de acesso enviado. Abra seu email e clique no link para entrar.");
+  authUser = data.user;
+  atualizarAuthInterface();
+}
+
+async function criarContaEmail() {
+  if (!supabaseClient) {
+    alert("Supabase ainda nÃ£o estÃ¡ configurado. Preencha supabase-config.js.");
+    return;
+  }
+
+  const credenciais = credenciaisAuth();
+  if (!credenciais) {
+    return;
+  }
+
+  const { data, error } = await supabaseClient.auth.signUp(credenciais);
+
+  if (error) {
+    alert(`Erro ao criar conta: ${error.message}`);
+    return;
+  }
+
+  authUser = data.session?.user || data.user || null;
+  atualizarAuthInterface();
+  alert(authUser ? "Conta criada e login realizado." : "Conta criada. Se o Supabase pedir confirmacao, verifique seu email ou desative Confirm email.");
 }
 
 async function sairEmail() {
@@ -397,12 +420,14 @@ function atualizarAuthInterface() {
   $("menuAuthStatus").textContent = online ? `Conectado: ${email}` : configurado ? "Pronto para login" : "Supabase nao configurado";
   $("menuAuthDetalhe").textContent = online
     ? "Suas fichas serao salvas no banco online."
-    : "Digite seu email e abra o link de acesso enviado pelo Supabase.";
+    : "Digite email e senha. Para nao enviar emails, desative Confirm email no Supabase.";
 
   $("loginEmailMenu").hidden = online;
+  $("criarContaEmail").hidden = online;
   $("loginEmailTopo").hidden = online;
   $("sairEmail").hidden = !online;
   $("authEmailInput").disabled = online;
+  $("authSenhaInput").disabled = online;
   $("criarFichaMenu").disabled = !online;
   $("importarFichaMenu").disabled = !online;
   $("salvarFicha").disabled = !online;
@@ -2190,14 +2215,15 @@ function inicializarEventos() {
   $("abrirFichasOnline").addEventListener("click", abrirFichasOnline);
   $("fecharFichasOnline").addEventListener("click", fecharFichasOnline);
   $("loginEmailMenu").addEventListener("click", loginEmail);
+  $("criarContaEmail").addEventListener("click", criarContaEmail);
   $("loginEmailTopo").addEventListener("click", loginEmail);
   $("sairEmail").addEventListener("click", sairEmail);
-  $("authEmailInput").addEventListener("keydown", (evento) => {
+  ["authEmailInput", "authSenhaInput"].forEach((id) => $(id).addEventListener("keydown", (evento) => {
     if (evento.key === "Enter") {
       evento.preventDefault();
       loginEmail();
     }
-  });
+  }));
   $("abrirAdmin").addEventListener("click", abrirAdmin);
   $("atualizarAdmin").addEventListener("click", atualizarAdmin);
   $("exportarJson").addEventListener("click", exportarJSON);

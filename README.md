@@ -20,7 +20,7 @@ http://127.0.0.1:8123/index.html
 
 O app usa Supabase para:
 
-- login por email com magic link;
+- login por email e senha;
 - PostgreSQL online;
 - salvamento/carregamento de fichas;
 - acesso admin por email.
@@ -36,6 +36,8 @@ window.CACADOR_SUPABASE = {
 ```
 
 Rode o SQL de [supabase-schema.sql](./supabase-schema.sql) no SQL Editor do Supabase.
+
+No Supabase, em **Authentication > Providers > Email**, deixe o provider Email ativado e desative **Confirm email** para evitar envio de email. Assim o app usa cadastro/login com senha e nao depende de magic link.
 
 No Supabase, em **Authentication > URL Configuration**, adicione a URL local e a URL do GitHub Pages em **Site URL** e **Redirect URLs**.
 
@@ -67,7 +69,7 @@ O site ficara em:
 https://netojoseluizferreira-sys.github.io/cacador-fichas/
 ```
 
-Adicione essa URL no Supabase para o magic link funcionar.
+Adicione essa URL no Supabase para login, cadastro e redirecionamentos do Auth.
 
 ## Arquivos principais
 

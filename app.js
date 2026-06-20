@@ -389,6 +389,10 @@ async function criarContaEmail() {
   const { data, error } = await supabaseClient.auth.signUp(credenciais);
 
   if (error) {
+    if (error.message?.toLowerCase().includes("email rate limit")) {
+      alert("O Supabase tentou enviar email de confirmacao e bateu no limite. No Supabase, va em Authentication > Providers > Email e desative Confirm email.");
+      return;
+    }
     alert(`Erro ao criar conta: ${error.message}`);
     return;
   }

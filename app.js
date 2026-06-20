@@ -505,6 +505,36 @@ async function salvarFichaOnline() {
   alert("Ficha salva online.");
 }
 
+async function salvarFichaOnlineSilencioso() {
+  if (!supabaseClient || !authUser || !fichaAtualId || modoTela === "admin" || salvandoOnline) {
+    return false;
+  }
+
+  const ficha = montarFicha();
+  salvandoOnline = true;
+  const { error } = await supabaseClient
+    .from("fichas")
+    .update({
+      nome: nomeFichaAtual(ficha),
+      sistema: ficha.sistema,
+      dados: ficha
+    })
+    .eq("id", fichaAtualId);
+  salvandoOnline = false;
+
+  if (error) {
+    console.warn("Nao foi possivel salvar a ficha online automaticamente:", error.message);
+    return false;
+  }
+
+  return true;
+}
+
+async function persistirFichaAposInteracao() {
+  autoSalvar();
+  await salvarFichaOnlineSilencioso();
+}
+
 async function buscarFichasOnline(todas = false) {
   if (!exigirLogin()) {
     return [];
@@ -642,6 +672,7 @@ async function carregarEscudoMestre() {
   renderIniciativa();
   preencher("mestreAnotacoes", mestreEstado.notas || "");
   await renderMestreRolagens();
+  renderRolagensJogadoresMestre();
 }
 
 async function carregarEstadoMestre() {
@@ -751,6 +782,7 @@ async function alternarFichaCronica(id, selecionada) {
   mestreEstado.ficha_ids = [...ids];
   await salvarEstadoMestre();
   renderSubgruposCronica();
+  renderRolagensJogadoresMestre();
 }
 
 async function carregarSubgruposCronica() {
@@ -1021,6 +1053,70 @@ async function renderMestreRolagens() {
     ...publicas.map((item) => rolagemBancoHtml(item, false))
   ].join("");
   $("mestreRolagensHistorico").innerHTML = html || "<div>Nenhuma rolagem do mestre ainda.</div>";
+}
+
+function rolagemJogadorMestreHtml(item) {
+  const dados = Array.isArray(item.dados) ? item.dados : [];
+  const dadosDesespero = Array.isArray(item.dadosDesespero) ? item.dadosDesespero : [];
+  const critico = item.critico ? "sim" : "nao";
+  const decisaoImpeto = item.impeto
+    ? item.aflicao
+      ? " - Impeto: Aflicao"
+      : item.perigoIncrementado
+        ? " - Impeto: Perigo aumentado"
+        : Number(item.desesperoOnes || 0)
+          ? " - Impeto: aguardando decisao"
+          : ""
+    : "";
+
+  return `
+    <div>
+      <strong>${escaparHtml(item.personagem)} - ${escaparHtml(textoTipoRolagem(item.tipo))}</strong>
+      <span>${escaparHtml(item.jogadorEmail)}${item.jogador ? ` - ${escaparHtml(item.jogador)}` : ""}</span>
+      <span>${escaparHtml(formatarDataRolagem(item.data))}</span>
+      <span>${escaparHtml(item.descricao || "Rolagem")}</span>
+      <span>Dados: ${dados.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"}</span>
+      ${item.impeto ? `<span>Dados de Desespero: ${dadosDesespero.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"} (${Number(item.desesperoOnes || 0)} resultado(s) 1)</span>` : ""}
+      <span>Sucessos: <strong>${Number(item.sucessos || 0)}</strong> (${Number(item.sucessosBase || 0)} em 6+, +${Number(item.sucessosExtras || 0)} por pares de 10) - Critico: ${critico}${decisaoImpeto}</span>
+    </div>
+  `;
+}
+
+function renderRolagensJogadoresMestre() {
+  if (!usuarioEhAdmin() || !$("mestreRolagensJogadores")) {
+    return;
+  }
+
+  const idsCronica = new Set(mestreEstado.ficha_ids);
+  const rolagens = fichasAdminCache
+    .filter((ficha) => idsCronica.has(ficha.id))
+    .flatMap((ficha) => {
+      const dadosFicha = ficha.dados || {};
+      const identidade = dadosFicha.identidade || {};
+      const itens = Array.isArray(dadosFicha.rolagens) ? dadosFicha.rolagens : [];
+      return itens.map((rolagem) => ({
+        ...rolagem,
+        personagem: identidade.nome || ficha.nome || "Ficha sem nome",
+        jogador: identidade.jogador || "",
+        jogadorEmail: ficha.owner_email || ""
+      }));
+    })
+    .sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+
+  $("mestreRolagensJogadores").innerHTML = rolagens.length
+    ? rolagens.slice(0, 60).map(rolagemJogadorMestreHtml).join("")
+    : "<div>Nenhuma rolagem de jogador nas fichas da crÃ´nica ainda.</div>";
+}
+
+async function atualizarRolagensJogadoresMestre() {
+  if (!usuarioEhAdmin()) {
+    return;
+  }
+
+  fichasAdminCache = await buscarFichasOnline(true);
+  renderFichasEscudo(fichasAdminCache);
+  renderSubgruposCronica();
+  renderRolagensJogadoresMestre();
 }
 
 async function atualizarRolagensPublicasCronica() {
@@ -2352,7 +2448,7 @@ function rolarDados(usarImpeto = false) {
   });
 
   renderRolagens();
-  autoSalvar();
+  persistirFichaAposInteracao();
 }
 
 function formatarDataRolagem(data) {
@@ -2418,6 +2514,10 @@ function textoAvisoImpeto(item) {
     return `<span><strong>Falha crítica/Aflição:</strong> o teste falha e o Caçador não pode usar Dados de Desespero até se redimir pelo Ímpeto.</span>`;
   }
 
+  if (item.perigoIncrementado || item.resolucaoImpeto === "perigo") {
+    return `<span>Perigo do subgrupo já foi aumentado. Resolução de Ímpeto travada.</span>`;
+  }
+
   if (item.impetoPassou === null || item.impetoPassou === undefined) {
     return `
       <span><strong>1 em Dado de Desespero:</strong> o teste passou?</span>
@@ -2426,39 +2526,42 @@ function textoAvisoImpeto(item) {
     `;
   }
 
+  const travado = item.resolvendoImpeto ? "disabled" : "";
   const botao = item.subgrupoId && !item.perigoIncrementado
-    ? `<button class="secundario" type="button" data-aumentar-perigo="${item.id}">Aumentar Perigo +${incremento}</button>`
+    ? `<button class="secundario" type="button" data-aumentar-perigo="${item.id}" ${travado}>Aumentar Perigo +${incremento}</button>`
     : item.perigoIncrementado ? "<span>Perigo do subgrupo já foi aumentado.</span>" : "";
 
   return `
     <span><strong>Teste passou com 1 em Dado de Desespero:</strong> escolha manter a vitória e aumentar Perigo em +${incremento}, ou tratar o teste como falha e entrar em Aflição.</span>
     ${botao}
-    <button class="secundario" type="button" data-impeto-aflicao="${item.id}">Tratar como falha/Aflição</button>
+    <button class="secundario" type="button" data-impeto-aflicao="${item.id}" ${travado}>Tratar como falha/Aflição</button>
   `;
 }
 
 function resolverImpeto(rolagemId, passou) {
   const item = state.rolagens.find((rolagem) => rolagem.id === rolagemId);
-  if (!item) {
+  if (!item || item.resolucaoImpeto || item.perigoIncrementado || item.aflicao) {
     return;
   }
 
   item.impetoPassou = Boolean(passou);
   item.aflicao = !passou;
+  item.resolucaoImpeto = passou ? null : "aflicao";
   renderRolagens();
-  autoSalvar();
+  persistirFichaAposInteracao();
 }
 
 function marcarAflicaoImpeto(rolagemId) {
   const item = state.rolagens.find((rolagem) => rolagem.id === rolagemId);
-  if (!item) {
+  if (!item || item.resolucaoImpeto || item.perigoIncrementado || item.aflicao) {
     return;
   }
 
   item.impetoPassou = false;
   item.aflicao = true;
+  item.resolucaoImpeto = "aflicao";
   renderRolagens();
-  autoSalvar();
+  persistirFichaAposInteracao();
 }
 
 async function aumentarPerigoPorImpeto(rolagemId) {
@@ -2468,21 +2571,32 @@ async function aumentarPerigoPorImpeto(rolagemId) {
     return;
   }
 
+  if (item.resolucaoImpeto || item.perigoIncrementado || item.aflicao || item.resolvendoImpeto) {
+    return;
+  }
+
   const incremento = Math.max(1, Number(item.desesperoOnes || 1));
+  item.resolvendoImpeto = true;
+  renderRolagens();
+
   const { error } = await supabaseClient.rpc("aumentar_perigo_subgrupo", {
     p_subgrupo_id: item.subgrupoId,
     p_incremento: incremento
   });
 
   if (error) {
+    item.resolvendoImpeto = false;
+    renderRolagens();
     alert(`Erro ao aumentar Perigo: ${error.message}`);
     return;
   }
 
   item.perigoIncrementado = true;
+  item.resolucaoImpeto = "perigo";
+  item.resolvendoImpeto = false;
   await carregarValoresCronicaDaFicha();
   renderRolagens();
-  autoSalvar();
+  persistirFichaAposInteracao();
   alert(`Perigo aumentado em +${incremento}.`);
 }
 
@@ -2931,6 +3045,7 @@ function inicializarEventos() {
   $("curarAgravadoVitalidade").addEventListener("click", curarAgravadoVitalidade);
   $("curarAgravadoVontade").addEventListener("click", curarAgravadoVontade);
   $("mestreRolarDados").addEventListener("click", mestreRolarDados);
+  $("atualizarRolagensJogadores").addEventListener("click", atualizarRolagensJogadoresMestre);
   $("salvarMestreAnotacoes").addEventListener("click", salvarMestreAnotacoes);
   $("criarSubgrupo").addEventListener("click", criarSubgrupoCronica);
   $("adicionarIniciativa").addEventListener("click", adicionarIniciativa);

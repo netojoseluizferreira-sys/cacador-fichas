@@ -178,6 +178,18 @@ function formatarDataCurta(data) {
   return dataObj.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function urlRetornoAuth() {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+
+  if (url.pathname.endsWith("/index.html")) {
+    url.pathname = url.pathname.replace(/index\.html$/, "");
+  }
+
+  return url.toString();
+}
+
 async function carregarCatalogo() {
   const resposta = await fetch("catalogo.json", { cache: "no-store" });
 
@@ -298,11 +310,17 @@ async function inicializarSupabase() {
   }
 
   const config = configSupabase();
-  supabaseClient = window.supabase.createClient(config.url, config.anonKey);
+  supabaseClient = window.supabase.createClient(config.url, config.anonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  });
 
-  const { data, error } = await supabaseClient.auth.getUser();
+  const { data, error } = await supabaseClient.auth.getSession();
   if (!error) {
-    authUser = data.user;
+    authUser = data.session?.user || null;
   }
 
   supabaseClient.auth.onAuthStateChange((_event, session) => {
@@ -345,7 +363,7 @@ async function loginEmail() {
   const { error } = await supabaseClient.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: window.location.origin + window.location.pathname
+      emailRedirectTo: urlRetornoAuth()
     }
   });
 

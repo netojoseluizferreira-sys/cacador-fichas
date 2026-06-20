@@ -39,6 +39,18 @@ Rode o SQL de [supabase-schema.sql](./supabase-schema.sql) no SQL Editor do Supa
 
 No Supabase, em **Authentication > URL Configuration**, adicione a URL local e a URL do GitHub Pages em **Site URL** e **Redirect URLs**.
 
+Use a URL do GitHub Pages com barra final e sem `index.html`:
+
+```txt
+https://netojoseluizferreira-sys.github.io/cacador-fichas/
+```
+
+Para testes locais, use:
+
+```txt
+http://127.0.0.1:8123/
+```
+
 ## GitHub Pages
 
 Depois de publicar no GitHub, ative:

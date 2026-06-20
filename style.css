@@ -573,6 +573,30 @@ button.secundario {
   gap: 8px;
 }
 
+.ficha-cronica-toggle {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-3);
+}
+
+.ficha-cronica-toggle input {
+  width: auto;
+}
+
+.iniciativa-lista .ativo {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240, 139, 33, 0.18);
+}
+
+.iniciativa-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
 .modal {
   position: fixed;
   inset: 0;

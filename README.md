@@ -24,6 +24,7 @@ O app usa Supabase para:
 - PostgreSQL online;
 - salvamento/carregamento de fichas;
 - acesso admin por email.
+- Escudo do Mestre com fichas da cronica, rolagens publicas/privadas, anotacoes e iniciativa.
 
 Configure [supabase-config.js](./supabase-config.js):
 
@@ -35,7 +36,7 @@ window.CACADOR_SUPABASE = {
 };
 ```
 
-Rode o SQL de [supabase-schema.sql](./supabase-schema.sql) no SQL Editor do Supabase.
+Rode o SQL de [supabase-schema.sql](./supabase-schema.sql) no SQL Editor do Supabase. Sempre que este arquivo mudar, rode novamente no Supabase para criar/atualizar as tabelas e politicas.
 
 No Supabase, em **Authentication > Providers > Email**, deixe o provider Email ativado e desative **Confirm email** para evitar envio de email. Assim o app usa cadastro/login com senha e nao depende de magic link.
 

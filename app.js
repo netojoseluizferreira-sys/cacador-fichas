@@ -111,6 +111,12 @@ let supabaseClient = null;
 let authUser = null;
 let fichaAtualId = null;
 let salvandoOnline = false;
+let mestreEstado = {
+  ficha_ids: [],
+  notas: "",
+  iniciativa: [],
+  turno: 0
+};
 
 const idsCamposTexto = [
   "nomePersonagem",
@@ -594,8 +600,306 @@ async function atualizarAdmin() {
     return;
   }
 
+  await carregarEscudoMestre();
+  await atualizarRolagensPublicasCronica();
+}
+
+async function carregarEscudoMestre() {
+  if (!usuarioEhAdmin()) {
+    return;
+  }
+
+  await carregarEstadoMestre();
   const lista = await buscarFichasOnline(true);
-  renderFichasOnline(lista, "adminFichasLista", true);
+  renderFichasEscudo(lista);
+  renderIniciativa();
+  preencher("mestreAnotacoes", mestreEstado.notas || "");
+  await renderMestreRolagens();
+}
+
+async function carregarEstadoMestre() {
+  const { data, error } = await supabaseClient
+    .from("escudo_mestre")
+    .select("ficha_ids,notas,iniciativa,turno")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) {
+    alert(`Erro ao carregar escudo: ${error.message}`);
+    return;
+  }
+
+  if (!data) {
+    const { data: criado, error: erroCriar } = await supabaseClient
+      .from("escudo_mestre")
+      .insert({ id: 1, mestre_email: emailAdmin() })
+      .select("ficha_ids,notas,iniciativa,turno")
+      .single();
+
+    if (erroCriar) {
+      alert(`Erro ao criar escudo: ${erroCriar.message}`);
+      return;
+    }
+
+    mestreEstado = normalizarEstadoMestre(criado);
+    return;
+  }
+
+  mestreEstado = normalizarEstadoMestre(data);
+}
+
+function normalizarEstadoMestre(data) {
+  return {
+    ficha_ids: Array.isArray(data?.ficha_ids) ? data.ficha_ids : [],
+    notas: data?.notas || "",
+    iniciativa: Array.isArray(data?.iniciativa) ? data.iniciativa : [],
+    turno: Number(data?.turno || 0)
+  };
+}
+
+async function salvarEstadoMestre() {
+  if (!usuarioEhAdmin()) {
+    alert("Apenas o mestre admin pode salvar o escudo.");
+    return false;
+  }
+
+  const { error } = await supabaseClient
+    .from("escudo_mestre")
+    .upsert({
+      id: 1,
+      mestre_email: emailAdmin(),
+      ficha_ids: mestreEstado.ficha_ids,
+      notas: mestreEstado.notas || "",
+      iniciativa: mestreEstado.iniciativa || [],
+      turno: mestreEstado.turno || 0
+    });
+
+  if (error) {
+    alert(`Erro ao salvar escudo: ${error.message}`);
+    return false;
+  }
+
+  return true;
+}
+
+function renderFichasEscudo(lista) {
+  $("adminFichasLista").innerHTML = lista.length
+    ? lista.map((ficha) => {
+      const marcado = mestreEstado.ficha_ids.includes(ficha.id) ? "checked" : "";
+      return `
+        <div class="ficha-online-item">
+          <div>
+            <strong>${escaparHtml(ficha.nome || "Ficha sem nome")}</strong>
+            <span>${escaparHtml(ficha.owner_email || "")}</span>
+            <span>Atualizada em ${escaparHtml(formatarDataCurta(ficha.updated_at))}</span>
+          </div>
+          <div class="ficha-online-acoes">
+            <label class="ficha-cronica-toggle">
+              <input type="checkbox" data-ficha-cronica="${ficha.id}" ${marcado} />
+              Crônica
+            </label>
+            <button type="button" data-carregar-online="${ficha.id}">Carregar</button>
+          </div>
+        </div>
+      `;
+    }).join("")
+    : "<div>Nenhuma ficha salva online ainda.</div>";
+
+  document.querySelectorAll("[data-ficha-cronica]").forEach((input) => {
+    input.addEventListener("change", () => alternarFichaCronica(input.dataset.fichaCronica, input.checked));
+  });
+
+  document.querySelectorAll("[data-carregar-online]").forEach((botao) => {
+    botao.addEventListener("click", () => carregarFichaOnline(botao.dataset.carregarOnline));
+  });
+}
+
+async function alternarFichaCronica(id, selecionada) {
+  const ids = new Set(mestreEstado.ficha_ids);
+  if (selecionada) {
+    ids.add(id);
+  } else {
+    ids.delete(id);
+  }
+  mestreEstado.ficha_ids = [...ids];
+  await salvarEstadoMestre();
+}
+
+function resultadoRolagem(dados) {
+  const sucessosBase = dados.filter((dado) => dado >= 6).length;
+  const dezenas = dados.filter((dado) => dado === 10).length;
+  const paresDez = Math.floor(dezenas / 2);
+  const sucessosExtras = paresDez * 2;
+  return {
+    dados,
+    sucessosBase,
+    dezenas,
+    paresDez,
+    sucessosExtras,
+    sucessos: sucessosBase + sucessosExtras,
+    critico: paresDez > 0
+  };
+}
+
+async function mestreRolarDados() {
+  if (!usuarioEhAdmin()) {
+    alert("Apenas o mestre admin pode usar esta rolagem.");
+    return;
+  }
+
+  const quantidade = Math.max(1, valor("mestreRolagemDados"));
+  const bonus = valor("mestreRolagemBonus");
+  const total = Math.max(1, quantidade + bonus);
+  const dados = Array.from({ length: total }, () => Math.floor(Math.random() * 10) + 1);
+  const resultado = {
+    ...resultadoRolagem(dados),
+    totalDados: total,
+    bonus,
+    data: new Date().toISOString()
+  };
+  const descricao = valor("mestreRolagemDescricao") || "Rolagem do mestre";
+  const tabela = valor("mestreRolagemVisibilidade") === "privada" ? "rolagens_privadas" : "rolagens_publicas";
+  const { error } = await supabaseClient
+    .from(tabela)
+    .insert({ mestre_email: emailAdmin(), descricao, resultado });
+
+  if (error) {
+    alert(`Erro ao salvar rolagem: ${error.message}`);
+    return;
+  }
+
+  preencher("mestreRolagemDescricao", "");
+  await renderMestreRolagens();
+  await atualizarRolagensPublicasCronica();
+}
+
+function rolagemBancoHtml(item, privada = false) {
+  const resultado = item.resultado || {};
+  const dados = Array.isArray(resultado.dados) ? resultado.dados : [];
+  const critico = resultado.critico ? "sim" : "nao";
+  const etiqueta = privada ? "Privada" : "Pública";
+  return `
+    <div>
+      <strong>${escaparHtml(etiqueta)} - ${escaparHtml(item.descricao || "Rolagem")}</strong>
+      <span>${escaparHtml(formatarDataRolagem(item.created_at || resultado.data))}</span>
+      <span>Dados: ${dados.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"}</span>
+      <span>Sucessos: <strong>${Number(resultado.sucessos || 0)}</strong> (${Number(resultado.sucessosBase || 0)} em 6+, +${Number(resultado.sucessosExtras || 0)} por pares de 10) - Critico: ${critico}</span>
+    </div>
+  `;
+}
+
+async function buscarRolagensTabela(tabela, limite = 20) {
+  const { data, error } = await supabaseClient
+    .from(tabela)
+    .select("id,descricao,resultado,created_at")
+    .order("created_at", { ascending: false })
+    .limit(limite);
+
+  if (error) {
+    alert(`Erro ao carregar rolagens: ${error.message}`);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function renderMestreRolagens() {
+  if (!usuarioEhAdmin()) {
+    return;
+  }
+
+  const publicas = await buscarRolagensTabela("rolagens_publicas", 10);
+  const privadas = await buscarRolagensTabela("rolagens_privadas", 10);
+  const html = [
+    ...privadas.map((item) => rolagemBancoHtml(item, true)),
+    ...publicas.map((item) => rolagemBancoHtml(item, false))
+  ].join("");
+  $("mestreRolagensHistorico").innerHTML = html || "<div>Nenhuma rolagem do mestre ainda.</div>";
+}
+
+async function atualizarRolagensPublicasCronica() {
+  if (!supabaseClient || !authUser) {
+    $("rolagensPublicasCronica").innerHTML = "<div>Entre para ver as rolagens públicas da crônica.</div>";
+    return;
+  }
+
+  const publicas = await buscarRolagensTabela("rolagens_publicas", 20);
+  $("rolagensPublicasCronica").innerHTML = publicas.length
+    ? publicas.map((item) => rolagemBancoHtml(item, false)).join("")
+    : "<div>Nenhuma rolagem pública ainda.</div>";
+}
+
+async function salvarMestreAnotacoes() {
+  mestreEstado.notas = valor("mestreAnotacoes");
+  if (await salvarEstadoMestre()) {
+    alert("Anotações salvas.");
+  }
+}
+
+async function adicionarIniciativa() {
+  const nome = valor("iniciativaNome");
+  if (!nome) {
+    alert("Informe o nome na iniciativa.");
+    return;
+  }
+
+  mestreEstado.iniciativa.push({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    nome,
+    valor: valor("iniciativaValor")
+  });
+  mestreEstado.iniciativa.sort((a, b) => Number(b.valor || 0) - Number(a.valor || 0));
+  preencher("iniciativaNome", "");
+  preencher("iniciativaValor", 0);
+  mestreEstado.turno = Math.min(mestreEstado.turno, Math.max(0, mestreEstado.iniciativa.length - 1));
+  renderIniciativa();
+  await salvarEstadoMestre();
+}
+
+async function removerIniciativa(id) {
+  mestreEstado.iniciativa = mestreEstado.iniciativa.filter((item) => item.id !== id);
+  if (mestreEstado.turno >= mestreEstado.iniciativa.length) {
+    mestreEstado.turno = 0;
+  }
+  renderIniciativa();
+  await salvarEstadoMestre();
+}
+
+async function proximoTurno() {
+  if (!mestreEstado.iniciativa.length) {
+    return;
+  }
+  mestreEstado.turno = (mestreEstado.turno + 1) % mestreEstado.iniciativa.length;
+  renderIniciativa();
+  await salvarEstadoMestre();
+}
+
+async function limparIniciativa() {
+  if (!confirm("Limpar toda a iniciativa?")) {
+    return;
+  }
+  mestreEstado.iniciativa = [];
+  mestreEstado.turno = 0;
+  renderIniciativa();
+  await salvarEstadoMestre();
+}
+
+function renderIniciativa() {
+  $("iniciativaLista").innerHTML = mestreEstado.iniciativa.length
+    ? mestreEstado.iniciativa.map((item, index) => `
+      <div class="iniciativa-item ${index === mestreEstado.turno ? "ativo" : ""}">
+        <div>
+          <strong>${index === mestreEstado.turno ? "Turno atual - " : ""}${escaparHtml(item.nome)}</strong>
+          <span>Ordem: ${escaparHtml(item.valor)}</span>
+        </div>
+        <button class="secundario" type="button" data-remover-iniciativa="${item.id}">Remover</button>
+      </div>
+    `).join("")
+    : "<div>Nenhuma iniciativa cadastrada.</div>";
+
+  document.querySelectorAll("[data-remover-iniciativa]").forEach((botao) => {
+    botao.addEventListener("click", () => removerIniciativa(botao.dataset.removerIniciativa));
+  });
 }
 
 function criarGrupo(container, grupos, tipo) {
@@ -821,12 +1125,16 @@ function setEtapa(nomeEtapa) {
   document.querySelectorAll(".etapa").forEach((etapa) => {
     etapa.classList.toggle("ativa", etapa.dataset.step === etapaFinal);
   });
+
+  if (etapaFinal === "rolagem") {
+    atualizarRolagensPublicasCronica();
+  }
 }
 
 function atualizarModoInterface() {
   const noMenu = modoTela === "menu";
   const etapasPermitidas = etapasPorModo[modoTela] || [];
-  const ordemGerenciar = { preview: 1, dano: 2, rolagem: 3, xp: 4, extras: 5 };
+  const ordemGerenciar = { preview: 1, dano: 2, rolagem: 3, xp: 4, extras: 5, admin: 6 };
 
   $("menuTela").hidden = !noMenu;
   $("appTela").hidden = noMenu;
@@ -1777,24 +2085,14 @@ function rolarDados() {
   }
 
   const dados = Array.from({ length: parada.total }, () => Math.floor(Math.random() * 10) + 1);
-  const sucessosBase = dados.filter((dado) => dado >= 6).length;
-  const dezenas = dados.filter((dado) => dado === 10).length;
-  const paresDez = Math.floor(dezenas / 2);
-  const sucessosExtras = paresDez * 2;
-  const sucessos = sucessosBase + sucessosExtras;
+  const resultado = resultadoRolagem(dados);
 
   state.rolagens.push({
     data: new Date().toISOString(),
     tipo: parada.tipo,
     descricao: parada.descricao,
     totalDados: parada.total,
-    dados,
-    sucessosBase,
-    dezenas,
-    paresDez,
-    sucessosExtras,
-    sucessos,
-    critico: paresDez > 0
+    ...resultado
   });
 
   renderRolagens();
@@ -2264,11 +2562,17 @@ function inicializarEventos() {
   $("rolagemHabilidade").addEventListener("change", atualizarControlesRolagem);
   $("rolagemBonus").addEventListener("input", atualizarControlesRolagem);
   $("rolarDados").addEventListener("click", rolarDados);
+  $("atualizarRolagensPublicas").addEventListener("click", atualizarRolagensPublicasCronica);
   $("aplicarDanoVitalidade").addEventListener("click", () => aplicarDano("vitalidade"));
   $("aplicarDanoVontade").addEventListener("click", () => aplicarDano("vontade"));
   $("comecarSessao").addEventListener("click", comecarSessao);
   $("curarAgravadoVitalidade").addEventListener("click", curarAgravadoVitalidade);
   $("curarAgravadoVontade").addEventListener("click", curarAgravadoVontade);
+  $("mestreRolarDados").addEventListener("click", mestreRolarDados);
+  $("salvarMestreAnotacoes").addEventListener("click", salvarMestreAnotacoes);
+  $("adicionarIniciativa").addEventListener("click", adicionarIniciativa);
+  $("proximoTurno").addEventListener("click", proximoTurno);
+  $("limparIniciativa").addEventListener("click", limparIniciativa);
 }
 
 function ajustarPontosPorCatalogo(tipo) {

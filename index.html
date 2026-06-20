@@ -471,6 +471,18 @@
           <div>Nenhuma rolagem ainda.</div>
         </div>
       </div>
+
+      <div class="subcard">
+        <div class="cabecalho-card">
+          <div>
+            <h3>Rolagens públicas da crônica</h3>
+          </div>
+          <button class="secundario" id="atualizarRolagensPublicas" type="button">Atualizar</button>
+        </div>
+        <div class="historico rolagem-historico" id="rolagensPublicasCronica">
+          <div>Nenhuma rolagem pública ainda.</div>
+        </div>
+      </div>
     </section>
 
     <section class="card etapa" data-step="preview">
@@ -487,16 +499,60 @@
     <section class="card etapa" data-step="admin">
       <div class="cabecalho-card">
         <div>
-          <h2>Administrador</h2>
-          <p>Consulta das fichas salvas no banco de dados.</p>
+          <h2>Escudo do Mestre</h2>
+          <p>Fichas da crônica, rolagens públicas/privadas, anotações e iniciativa.</p>
         </div>
         <button id="atualizarAdmin" type="button">Atualizar</button>
       </div>
 
       <div class="subcard">
-        <h3>Fichas no banco</h3>
+        <h3>Fichas da crônica</h3>
         <div class="historico fichas-online" id="adminFichasLista">
           <div>Entre com a conta administradora para ver as fichas.</div>
+        </div>
+      </div>
+
+      <div class="duas-colunas">
+        <div class="subcard">
+          <h3>Rolagem do mestre</h3>
+          <div class="grid">
+            <label>Descrição <input type="text" id="mestreRolagemDescricao" placeholder="Ex: Percepção do monstro" /></label>
+            <label>Dados <input type="number" id="mestreRolagemDados" min="1" value="3" /></label>
+          </div>
+          <div class="grid">
+            <label>Bônus <input type="number" id="mestreRolagemBonus" value="0" /></label>
+            <label>
+              Visibilidade
+              <select id="mestreRolagemVisibilidade">
+                <option value="publica">Pública</option>
+                <option value="privada">Privada</option>
+              </select>
+            </label>
+          </div>
+          <button id="mestreRolarDados" type="button">Rolar</button>
+          <div class="historico rolagem-historico" id="mestreRolagensHistorico">
+            <div>Nenhuma rolagem do mestre ainda.</div>
+          </div>
+        </div>
+
+        <div class="subcard">
+          <h3>Anotações</h3>
+          <textarea id="mestreAnotacoes" placeholder="Notas privadas da sessão, pistas, monstros, consequências..."></textarea>
+          <button id="salvarMestreAnotacoes" type="button">Salvar anotações</button>
+        </div>
+      </div>
+
+      <div class="subcard">
+        <h3>Iniciativa</h3>
+        <div class="grid">
+          <label>Nome <input type="text" id="iniciativaNome" placeholder="Jogador, monstro, grupo..." /></label>
+          <label>Ordem <input type="number" id="iniciativaValor" value="0" /></label>
+        </div>
+        <button id="adicionarIniciativa" type="button">Adicionar</button>
+        <button class="secundario" id="proximoTurno" type="button">Próximo</button>
+        <button class="secundario" id="limparIniciativa" type="button">Limpar</button>
+        <div class="historico iniciativa-lista" id="iniciativaLista">
+          <div>Nenhuma iniciativa cadastrada.</div>
         </div>
       </div>
     </section>

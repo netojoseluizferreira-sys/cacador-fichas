@@ -73,3 +73,92 @@ using (
   user_id = auth.uid()
   or auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com'
 );
+
+create table if not exists public.escudo_mestre (
+  id integer primary key default 1 check (id = 1),
+  mestre_email text not null default 'netojoseluizferreira@gmail.com',
+  ficha_ids uuid[] not null default '{}',
+  notas text not null default '',
+  iniciativa jsonb not null default '[]'::jsonb,
+  turno integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.escudo_mestre enable row level security;
+
+drop trigger if exists escudo_mestre_set_updated_at on public.escudo_mestre;
+create trigger escudo_mestre_set_updated_at
+before update on public.escudo_mestre
+for each row execute function public.set_updated_at();
+
+drop policy if exists "Apenas admin gerencia escudo" on public.escudo_mestre;
+create policy "Apenas admin gerencia escudo"
+on public.escudo_mestre
+for all
+to authenticated
+using (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com')
+with check (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+
+create table if not exists public.rolagens_publicas (
+  id uuid primary key default gen_random_uuid(),
+  mestre_email text not null default 'netojoseluizferreira@gmail.com',
+  descricao text not null default 'Rolagem publica',
+  resultado jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists rolagens_publicas_created_at_idx on public.rolagens_publicas(created_at desc);
+alter table public.rolagens_publicas enable row level security;
+
+drop policy if exists "Todos autenticados leem rolagens publicas" on public.rolagens_publicas;
+create policy "Todos autenticados leem rolagens publicas"
+on public.rolagens_publicas
+for select
+to authenticated
+using (true);
+
+drop policy if exists "Apenas admin cria rolagens publicas" on public.rolagens_publicas;
+create policy "Apenas admin cria rolagens publicas"
+on public.rolagens_publicas
+for insert
+to authenticated
+with check (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+
+drop policy if exists "Apenas admin apaga rolagens publicas" on public.rolagens_publicas;
+create policy "Apenas admin apaga rolagens publicas"
+on public.rolagens_publicas
+for delete
+to authenticated
+using (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+
+create table if not exists public.rolagens_privadas (
+  id uuid primary key default gen_random_uuid(),
+  mestre_email text not null default 'netojoseluizferreira@gmail.com',
+  descricao text not null default 'Rolagem privada',
+  resultado jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists rolagens_privadas_created_at_idx on public.rolagens_privadas(created_at desc);
+alter table public.rolagens_privadas enable row level security;
+
+drop policy if exists "Apenas admin le rolagens privadas" on public.rolagens_privadas;
+create policy "Apenas admin le rolagens privadas"
+on public.rolagens_privadas
+for select
+to authenticated
+using (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+
+drop policy if exists "Apenas admin cria rolagens privadas" on public.rolagens_privadas;
+create policy "Apenas admin cria rolagens privadas"
+on public.rolagens_privadas
+for insert
+to authenticated
+with check (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');
+
+drop policy if exists "Apenas admin apaga rolagens privadas" on public.rolagens_privadas;
+create policy "Apenas admin apaga rolagens privadas"
+on public.rolagens_privadas
+for delete
+to authenticated
+using (auth.jwt() ->> 'email' = 'netojoseluizferreira@gmail.com');

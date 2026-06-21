@@ -51,7 +51,7 @@ const habilidades = [
       ["empatiaAnimais", "Empatia com Animais"],
       ["etiqueta", "Etiqueta"],
       ["intimidacao", "Intimidação"],
-      ["labia", "Lábia"],
+      ["labia", "Sagacidade"],
       ["lideranca", "Liderança"],
       ["manha", "Manha"],
       ["performance", "Performance"],
@@ -62,7 +62,7 @@ const habilidades = [
   {
     grupo: "Mentais",
     itens: [
-      ["academicos", "Acadêmicos"],
+      ["academicos", "Erudição"],
       ["ciencia", "Ciência"],
       ["financas", "Finanças"],
       ["investigacao", "Investigação"],
@@ -1910,7 +1910,7 @@ function validarFicha() {
 
   [
     ["ciencia", "especializacaoCiencia", "Ciência"],
-    ["academicos", "especializacaoAcademicos", "Acadêmicos"],
+    ["academicos", "especializacaoAcademicos", "Erudição"],
     ["oficios", "especializacaoOficios", "Ofícios"],
     ["performance", "especializacaoPerformance", "Performance"]
   ].forEach(([skillId, specId, nome]) => {
@@ -2198,7 +2198,7 @@ ${blocoGrupo("Mentais", ficha.habilidades.mentais)}
 ESPECIALIZAÇÕES
 Livre: ${ficha.especializacoes.livre || "Nenhuma"}
 Ciência: ${ficha.especializacoes.ciencia || "Nenhuma"}
-Acadêmicos: ${ficha.especializacoes.academicos || "Nenhuma"}
+Erudição: ${ficha.especializacoes.academicos || "Nenhuma"}
 Ofícios: ${ficha.especializacoes.oficios || "Nenhuma"}
 Performance: ${ficha.especializacoes.performance || "Nenhuma"}
 

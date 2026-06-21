@@ -669,10 +669,11 @@ async function carregarEscudoMestre() {
   renderFichasEscudo(lista);
   await carregarSubgruposCronica();
   renderSubgruposCronica();
+  atualizarOpcoesIniciativaCronica();
   renderIniciativa();
   preencher("mestreAnotacoes", mestreEstado.notas || "");
   await renderMestreRolagens();
-  renderRolagensJogadoresMestre();
+  await renderRolagensJogadoresMestre();
 }
 
 async function carregarEstadoMestre() {
@@ -782,7 +783,8 @@ async function alternarFichaCronica(id, selecionada) {
   mestreEstado.ficha_ids = [...ids];
   await salvarEstadoMestre();
   renderSubgruposCronica();
-  renderRolagensJogadoresMestre();
+  atualizarOpcoesIniciativaCronica();
+  await renderRolagensJogadoresMestre();
 }
 
 async function carregarSubgruposCronica() {
@@ -809,6 +811,27 @@ async function carregarSubgruposCronica() {
 function fichasSelecionadasCronica() {
   const ids = new Set(mestreEstado.ficha_ids);
   return fichasAdminCache.filter((ficha) => ids.has(ficha.id));
+}
+
+function nomeFichaParaMesa(ficha) {
+  const identidade = ficha?.dados?.identidade || {};
+  return identidade.nome || ficha?.nome || "Ficha sem nome";
+}
+
+function jogadorFichaParaMesa(ficha) {
+  const identidade = ficha?.dados?.identidade || {};
+  return identidade.jogador || ficha?.owner_email || "";
+}
+
+function atualizarOpcoesIniciativaCronica() {
+  if (!$("iniciativaFicha")) {
+    return;
+  }
+
+  const fichas = fichasSelecionadasCronica();
+  $("iniciativaFicha").innerHTML = fichas.length
+    ? fichas.map((ficha) => `<option value="${ficha.id}">${escaparHtml(nomeFichaParaMesa(ficha))}${jogadorFichaParaMesa(ficha) ? ` - ${escaparHtml(jogadorFichaParaMesa(ficha))}` : ""}</option>`).join("")
+    : `<option value="">Nenhuma ficha na crônica</option>`;
 }
 
 function renderSubgruposCronica() {
@@ -1026,6 +1049,63 @@ function rolagemBancoHtml(item, privada = false) {
   `;
 }
 
+function rolagemJogadorPublicaHtml(item) {
+  const resultado = item.resultado || item;
+  const dados = Array.isArray(resultado.dados) ? resultado.dados : [];
+  const dadosDesespero = Array.isArray(resultado.dadosDesespero) ? resultado.dadosDesespero : [];
+  const critico = resultado.critico ? "sim" : "nao";
+  const decisaoImpeto = resultado.impeto
+    ? resultado.aflicao
+      ? " - Ímpeto: Aflição"
+      : resultado.perigoIncrementado
+        ? " - Ímpeto: Perigo aumentado"
+        : Number(resultado.desesperoOnes || 0)
+          ? " - Ímpeto: aguardando decisão"
+          : ""
+    : "";
+
+  return `
+    <div>
+      <strong>Jogador - ${escaparHtml(item.personagem || "Ficha sem nome")} - ${escaparHtml(textoTipoRolagem(resultado.tipo))}</strong>
+      <span>${escaparHtml(item.owner_email || item.jogadorEmail || "")}${item.jogador ? ` - ${escaparHtml(item.jogador)}` : ""}</span>
+      <span>${escaparHtml(formatarDataRolagem(item.created_at || resultado.data))}</span>
+      <span>${escaparHtml(item.descricao || resultado.descricao || "Rolagem")}</span>
+      <span>Dados: ${dados.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"}</span>
+      ${resultado.impeto ? `<span>Dados de Desespero: ${dadosDesespero.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"} (${Number(resultado.desesperoOnes || 0)} resultado(s) 1)</span>` : ""}
+      <span>Sucessos: <strong>${Number(resultado.sucessos || 0)}</strong> (${Number(resultado.sucessosBase || 0)} em 6+, +${Number(resultado.sucessosExtras || 0)} por pares de 10) - Critico: ${critico}${decisaoImpeto}</span>
+    </div>
+  `;
+}
+
+function payloadRolagemJogador(item) {
+  return {
+    user_id: authUser.id,
+    owner_email: authUser.email,
+    ficha_id: fichaAtualId,
+    rolagem_id: String(item.id),
+    subgrupo_id: item.subgrupoId || null,
+    subgrupo_nome: item.subgrupoNome || "",
+    personagem: valor("nomePersonagem") || "Ficha sem nome",
+    jogador: valor("nomeJogador"),
+    descricao: item.descricao || "Rolagem",
+    resultado: item
+  };
+}
+
+async function salvarRolagemJogadorPublica(item) {
+  if (!supabaseClient || !authUser || !fichaAtualId || modoTela === "admin") {
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("rolagens_jogadores_publicas")
+    .upsert(payloadRolagemJogador(item), { onConflict: "ficha_id,rolagem_id" });
+
+  if (error) {
+    console.warn("Nao foi possivel publicar a rolagem do jogador:", error.message);
+  }
+}
+
 async function buscarRolagensTabela(tabela, limite = 20) {
   const { data, error } = await supabaseClient
     .from(tabela)
@@ -1035,6 +1115,26 @@ async function buscarRolagensTabela(tabela, limite = 20) {
 
   if (error) {
     alert(`Erro ao carregar rolagens: ${error.message}`);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function buscarRolagensJogadoresPublicas(limite = 80, subgrupoIds = []) {
+  let query = supabaseClient
+    .from("rolagens_jogadores_publicas")
+    .select("id,owner_email,ficha_id,rolagem_id,subgrupo_id,subgrupo_nome,personagem,jogador,descricao,resultado,created_at")
+    .order("created_at", { ascending: false })
+    .limit(limite);
+
+  if (subgrupoIds.length) {
+    query = query.in("subgrupo_id", subgrupoIds);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn("Nao foi possivel carregar rolagens dos jogadores:", error.message);
     return [];
   }
 
@@ -1055,56 +1155,59 @@ async function renderMestreRolagens() {
   $("mestreRolagensHistorico").innerHTML = html || "<div>Nenhuma rolagem do mestre ainda.</div>";
 }
 
-function rolagemJogadorMestreHtml(item) {
-  const dados = Array.isArray(item.dados) ? item.dados : [];
-  const dadosDesespero = Array.isArray(item.dadosDesespero) ? item.dadosDesespero : [];
-  const critico = item.critico ? "sim" : "nao";
-  const decisaoImpeto = item.impeto
-    ? item.aflicao
-      ? " - Impeto: Aflicao"
-      : item.perigoIncrementado
-        ? " - Impeto: Perigo aumentado"
-        : Number(item.desesperoOnes || 0)
-          ? " - Impeto: aguardando decisao"
-          : ""
-    : "";
-
-  return `
-    <div>
-      <strong>${escaparHtml(item.personagem)} - ${escaparHtml(textoTipoRolagem(item.tipo))}</strong>
-      <span>${escaparHtml(item.jogadorEmail)}${item.jogador ? ` - ${escaparHtml(item.jogador)}` : ""}</span>
-      <span>${escaparHtml(formatarDataRolagem(item.data))}</span>
-      <span>${escaparHtml(item.descricao || "Rolagem")}</span>
-      <span>Dados: ${dados.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"}</span>
-      ${item.impeto ? `<span>Dados de Desespero: ${dadosDesespero.map((dado) => `<b>${escaparHtml(dado)}</b>`).join(", ") || "nenhum"} (${Number(item.desesperoOnes || 0)} resultado(s) 1)</span>` : ""}
-      <span>Sucessos: <strong>${Number(item.sucessos || 0)}</strong> (${Number(item.sucessosBase || 0)} em 6+, +${Number(item.sucessosExtras || 0)} por pares de 10) - Critico: ${critico}${decisaoImpeto}</span>
-    </div>
-  `;
-}
-
-function renderRolagensJogadoresMestre() {
-  if (!usuarioEhAdmin() || !$("mestreRolagensJogadores")) {
-    return;
-  }
-
+function rolagensJogadoresDasFichasSelecionadas() {
   const idsCronica = new Set(mestreEstado.ficha_ids);
-  const rolagens = fichasAdminCache
+  return fichasAdminCache
     .filter((ficha) => idsCronica.has(ficha.id))
     .flatMap((ficha) => {
       const dadosFicha = ficha.dados || {};
       const identidade = dadosFicha.identidade || {};
       const itens = Array.isArray(dadosFicha.rolagens) ? dadosFicha.rolagens : [];
       return itens.map((rolagem) => ({
-        ...rolagem,
+        id: `ficha-${ficha.id}-${rolagem.id}`,
+        owner_email: ficha.owner_email || "",
+        ficha_id: ficha.id,
+        rolagem_id: rolagem.id,
         personagem: identidade.nome || ficha.nome || "Ficha sem nome",
         jogador: identidade.jogador || "",
-        jogadorEmail: ficha.owner_email || ""
+        descricao: rolagem.descricao || "Rolagem",
+        resultado: rolagem,
+        created_at: rolagem.data
       }));
-    })
-    .sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+    });
+}
+
+function subgrupoIdsDaCronicaSelecionada() {
+  const idsFichas = new Set(mestreEstado.ficha_ids);
+  return subgruposCronica
+    .filter((subgrupo) => (subgrupo.ficha_ids || []).some((id) => idsFichas.has(id)))
+    .map((subgrupo) => subgrupo.id);
+}
+
+async function renderRolagensJogadoresMestre() {
+  if (!usuarioEhAdmin() || !$("mestreRolagensJogadores")) {
+    return;
+  }
+
+  const idsFichas = new Set(mestreEstado.ficha_ids);
+  const idsSubgrupos = subgrupoIdsDaCronicaSelecionada();
+  const publicas = (await buscarRolagensJogadoresPublicas(120, idsSubgrupos))
+    .filter((item) => idsFichas.has(item.ficha_id) || (item.subgrupo_id && idsSubgrupos.includes(item.subgrupo_id)));
+  const porChave = new Map();
+  [...publicas, ...rolagensJogadoresDasFichasSelecionadas()].forEach((item) => {
+    const chave = `${item.ficha_id || ""}:${item.rolagem_id || item.id}`;
+    if (!porChave.has(chave)) {
+      porChave.set(chave, item);
+    }
+  });
+  const rolagens = [...porChave.values()].sort((a, b) => {
+    const dataA = a.created_at || a.resultado?.data || 0;
+    const dataB = b.created_at || b.resultado?.data || 0;
+    return new Date(dataB) - new Date(dataA);
+  });
 
   $("mestreRolagensJogadores").innerHTML = rolagens.length
-    ? rolagens.slice(0, 60).map(rolagemJogadorMestreHtml).join("")
+    ? rolagens.slice(0, 80).map(rolagemJogadorPublicaHtml).join("")
     : "<div>Nenhuma rolagem de jogador nas fichas da crÃ´nica ainda.</div>";
 }
 
@@ -1116,7 +1219,52 @@ async function atualizarRolagensJogadoresMestre() {
   fichasAdminCache = await buscarFichasOnline(true);
   renderFichasEscudo(fichasAdminCache);
   renderSubgruposCronica();
-  renderRolagensJogadoresMestre();
+  atualizarOpcoesIniciativaCronica();
+  await renderRolagensJogadoresMestre();
+}
+
+async function limparHistoricoRolagens() {
+  if (!usuarioEhAdmin()) {
+    return;
+  }
+
+  if (!confirm("Limpar todo o histórico de rolagens do mestre e dos jogadores da crônica?")) {
+    return;
+  }
+
+  const tabelas = ["rolagens_publicas", "rolagens_privadas", "rolagens_jogadores_publicas"];
+  for (const tabela of tabelas) {
+    const { error } = await supabaseClient.from(tabela).delete().not("id", "is", null);
+    if (error) {
+      alert(`Erro ao limpar ${tabela}: ${error.message}`);
+      return;
+    }
+  }
+
+  const fichas = fichasSelecionadasCronica();
+  for (const ficha of fichas) {
+    const dados = { ...(ficha.dados || {}), rolagens: [] };
+    const { error } = await supabaseClient
+      .from("fichas")
+      .update({ dados })
+      .eq("id", ficha.id);
+    if (error) {
+      alert(`Erro ao limpar rolagens da ficha ${ficha.nome || ficha.id}: ${error.message}`);
+      return;
+    }
+    ficha.dados = dados;
+  }
+
+  if (fichaAtualId && mestreEstado.ficha_ids.includes(fichaAtualId)) {
+    state.rolagens = [];
+    renderRolagens();
+    autoSalvar();
+  }
+
+  await renderMestreRolagens();
+  await renderRolagensJogadoresMestre();
+  await atualizarRolagensPublicasCronica();
+  alert("Histórico de rolagens limpo.");
 }
 
 async function atualizarRolagensPublicasCronica() {
@@ -1125,9 +1273,17 @@ async function atualizarRolagensPublicasCronica() {
     return;
   }
 
-  const publicas = await buscarRolagensTabela("rolagens_publicas", 20);
-  $("rolagensPublicasCronica").innerHTML = publicas.length
-    ? publicas.map((item) => rolagemBancoHtml(item, false)).join("")
+  const [publicasMestre, publicasJogadores] = await Promise.all([
+    buscarRolagensTabela("rolagens_publicas", 30),
+    valoresGrupoCronica.id ? buscarRolagensJogadoresPublicas(60, [valoresGrupoCronica.id]) : Promise.resolve([])
+  ]);
+  const itens = [
+    ...publicasMestre.map((item) => ({ tipo: "mestre", data: item.created_at || item.resultado?.data, html: rolagemBancoHtml(item, false) })),
+    ...publicasJogadores.map((item) => ({ tipo: "jogador", data: item.created_at || item.resultado?.data, html: rolagemJogadorPublicaHtml(item) }))
+  ].sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+
+  $("rolagensPublicasCronica").innerHTML = itens.length
+    ? itens.slice(0, 80).map((item) => item.html).join("")
     : "<div>Nenhuma rolagem pública ainda.</div>";
 }
 
@@ -1153,6 +1309,29 @@ async function adicionarIniciativa() {
   mestreEstado.iniciativa.sort((a, b) => Number(b.valor || 0) - Number(a.valor || 0));
   preencher("iniciativaNome", "");
   preencher("iniciativaValor", 0);
+  mestreEstado.turno = Math.min(mestreEstado.turno, Math.max(0, mestreEstado.iniciativa.length - 1));
+  renderIniciativa();
+  await salvarEstadoMestre();
+}
+
+async function adicionarFichaIniciativa() {
+  const fichaId = valor("iniciativaFicha");
+  const ficha = fichasSelecionadasCronica().find((item) => item.id === fichaId);
+  if (!ficha) {
+    alert("Selecione uma ficha da crônica.");
+    return;
+  }
+
+  mestreEstado.iniciativa.push({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    nome: nomeFichaParaMesa(ficha),
+    detalhe: jogadorFichaParaMesa(ficha),
+    fichaId: ficha.id,
+    tipo: "jogador",
+    valor: valor("iniciativaFichaValor")
+  });
+  mestreEstado.iniciativa.sort((a, b) => Number(b.valor || 0) - Number(a.valor || 0));
+  preencher("iniciativaFichaValor", 0);
   mestreEstado.turno = Math.min(mestreEstado.turno, Math.max(0, mestreEstado.iniciativa.length - 1));
   renderIniciativa();
   await salvarEstadoMestre();
@@ -1192,6 +1371,7 @@ function renderIniciativa() {
       <div class="iniciativa-item ${index === mestreEstado.turno ? "ativo" : ""}">
         <div>
           <strong>${index === mestreEstado.turno ? "Turno atual - " : ""}${escaparHtml(item.nome)}</strong>
+          ${item.detalhe ? `<span>${escaparHtml(item.detalhe)}</span>` : ""}
           <span>Ordem: ${escaparHtml(item.valor)}</span>
         </div>
         <button class="secundario" type="button" data-remover-iniciativa="${item.id}">Remover</button>
@@ -2433,7 +2613,7 @@ function rolarDados(usarImpeto = false) {
     ? resultadoImpeto(dadosNormais, dadosDesespero)
     : resultadoRolagem(dadosNormais);
 
-  state.rolagens.push({
+  const itemRolagem = {
     id: criarIdRolagem(),
     data: new Date().toISOString(),
     tipo: usarImpeto ? "impeto" : parada.tipo,
@@ -2445,10 +2625,12 @@ function rolarDados(usarImpeto = false) {
     subgrupoNome: valoresGrupoCronica.nome,
     perigoIncrementado: false,
     ...resultado
-  });
+  };
 
+  state.rolagens.push(itemRolagem);
   renderRolagens();
   persistirFichaAposInteracao();
+  salvarRolagemJogadorPublica(itemRolagem);
 }
 
 function formatarDataRolagem(data) {
@@ -2549,6 +2731,7 @@ function resolverImpeto(rolagemId, passou) {
   item.resolucaoImpeto = passou ? null : "aflicao";
   renderRolagens();
   persistirFichaAposInteracao();
+  salvarRolagemJogadorPublica(item);
 }
 
 function marcarAflicaoImpeto(rolagemId) {
@@ -2562,6 +2745,7 @@ function marcarAflicaoImpeto(rolagemId) {
   item.resolucaoImpeto = "aflicao";
   renderRolagens();
   persistirFichaAposInteracao();
+  salvarRolagemJogadorPublica(item);
 }
 
 async function aumentarPerigoPorImpeto(rolagemId) {
@@ -2597,6 +2781,7 @@ async function aumentarPerigoPorImpeto(rolagemId) {
   await carregarValoresCronicaDaFicha();
   renderRolagens();
   persistirFichaAposInteracao();
+  salvarRolagemJogadorPublica(item);
   alert(`Perigo aumentado em +${incremento}.`);
 }
 
@@ -3046,8 +3231,10 @@ function inicializarEventos() {
   $("curarAgravadoVontade").addEventListener("click", curarAgravadoVontade);
   $("mestreRolarDados").addEventListener("click", mestreRolarDados);
   $("atualizarRolagensJogadores").addEventListener("click", atualizarRolagensJogadoresMestre);
+  $("limparHistoricoRolagens").addEventListener("click", limparHistoricoRolagens);
   $("salvarMestreAnotacoes").addEventListener("click", salvarMestreAnotacoes);
   $("criarSubgrupo").addEventListener("click", criarSubgrupoCronica);
+  $("adicionarFichaIniciativa").addEventListener("click", adicionarFichaIniciativa);
   $("adicionarIniciativa").addEventListener("click", adicionarIniciativa);
   $("proximoTurno").addEventListener("click", proximoTurno);
   $("limparIniciativa").addEventListener("click", limparIniciativa);

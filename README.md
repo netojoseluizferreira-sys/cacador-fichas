@@ -25,7 +25,8 @@ O app usa Supabase para:
 - salvamento/carregamento de fichas;
 - acesso admin por email.
 - Escudo do Mestre com fichas da cronica, rolagens publicas/privadas, anotacoes e iniciativa.
-- Escudo do Mestre tambem mostra o historico de rolagens salvas nas fichas dos jogadores da cronica.
+- Escudo do Mestre tambem mostra e limpa o historico de rolagens dos jogadores da cronica.
+- Jogadores veem um historico publico com rolagens publicas do mestre e rolagens dos jogadores do subgrupo.
 - O botao Admin aparece direto no menu quando a conta admin entra.
 - Ao editar uma ficha pelo Escudo, o admin pode alterar livremente a ficha do jogador e salvar no banco.
 - Subgrupos de cronica com valores de Desespero e Perigo visiveis nas fichas dos jogadores daquele subgrupo.

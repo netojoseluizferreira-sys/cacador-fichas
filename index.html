@@ -491,7 +491,7 @@
       <div class="subcard">
         <div class="cabecalho-card">
           <div>
-            <h3>Rolagens públicas da crônica</h3>
+            <h3>Histórico público da crônica</h3>
           </div>
           <button class="secundario" id="atualizarRolagensPublicas" type="button">Atualizar</button>
         </div>
@@ -546,7 +546,10 @@
           <div>
             <h3>HistÃ³rico de rolagens dos jogadores</h3>
           </div>
-          <button class="secundario" id="atualizarRolagensJogadores" type="button">Atualizar</button>
+          <div class="ficha-online-acoes">
+            <button class="secundario" id="atualizarRolagensJogadores" type="button">Atualizar</button>
+            <button class="secundario" id="limparHistoricoRolagens" type="button">Limpar todo histórico</button>
+          </div>
         </div>
         <div class="historico rolagem-historico" id="mestreRolagensJogadores">
           <div>Nenhuma rolagem de jogador ainda.</div>
@@ -586,10 +589,16 @@
       <div class="subcard">
         <h3>Iniciativa</h3>
         <div class="grid">
+          <label>Jogador da crônica <select id="iniciativaFicha"></select></label>
+          <label>Ordem <input type="number" id="iniciativaFichaValor" value="0" /></label>
+        </div>
+        <button id="adicionarFichaIniciativa" type="button">Adicionar jogador</button>
+
+        <div class="grid">
           <label>Nome <input type="text" id="iniciativaNome" placeholder="Jogador, monstro, grupo..." /></label>
           <label>Ordem <input type="number" id="iniciativaValor" value="0" /></label>
         </div>
-        <button id="adicionarIniciativa" type="button">Adicionar</button>
+        <button id="adicionarIniciativa" type="button">Adicionar outro</button>
         <button class="secundario" id="proximoTurno" type="button">Próximo</button>
         <button class="secundario" id="limparIniciativa" type="button">Limpar</button>
         <div class="historico iniciativa-lista" id="iniciativaLista">
@@ -619,7 +628,7 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js?v=20260620-5"></script>
-  <script src="app.js?v=20260620-5"></script>
+  <script src="supabase-config.js?v=20260620-6"></script>
+  <script src="app.js?v=20260620-6"></script>
 </body>
 </html>

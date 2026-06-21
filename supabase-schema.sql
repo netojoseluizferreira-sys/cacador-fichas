@@ -210,6 +210,70 @@ for delete
 to authenticated
 using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
 
+create table if not exists public.rolagens_jogadores_publicas (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  owner_email text not null,
+  ficha_id uuid references public.fichas(id) on delete cascade,
+  rolagem_id text not null,
+  subgrupo_id uuid references public.cronica_subgrupos(id) on delete set null,
+  subgrupo_nome text not null default '',
+  personagem text not null default 'Ficha sem nome',
+  jogador text not null default '',
+  descricao text not null default 'Rolagem',
+  resultado jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (ficha_id, rolagem_id)
+);
+
+create index if not exists rolagens_jogadores_publicas_created_at_idx on public.rolagens_jogadores_publicas(created_at desc);
+create index if not exists rolagens_jogadores_publicas_subgrupo_idx on public.rolagens_jogadores_publicas(subgrupo_id, created_at desc);
+alter table public.rolagens_jogadores_publicas enable row level security;
+
+drop trigger if exists rolagens_jogadores_publicas_set_updated_at on public.rolagens_jogadores_publicas;
+create trigger rolagens_jogadores_publicas_set_updated_at
+before update on public.rolagens_jogadores_publicas
+for each row execute function public.set_updated_at();
+
+drop policy if exists "Todos autenticados leem rolagens de jogadores" on public.rolagens_jogadores_publicas;
+create policy "Todos autenticados leem rolagens de jogadores"
+on public.rolagens_jogadores_publicas
+for select
+to authenticated
+using (true);
+
+drop policy if exists "Jogadores criam suas rolagens publicas" on public.rolagens_jogadores_publicas;
+create policy "Jogadores criam suas rolagens publicas"
+on public.rolagens_jogadores_publicas
+for insert
+to authenticated
+with check (
+  user_id = auth.uid()
+  and owner_email = auth.jwt() ->> 'email'
+);
+
+drop policy if exists "Jogadores atualizam suas rolagens e admin atualiza todas" on public.rolagens_jogadores_publicas;
+create policy "Jogadores atualizam suas rolagens e admin atualiza todas"
+on public.rolagens_jogadores_publicas
+for update
+to authenticated
+using (
+  user_id = auth.uid()
+  or auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com')
+)
+with check (
+  user_id = auth.uid()
+  or auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com')
+);
+
+drop policy if exists "Admin apaga rolagens publicas de jogadores" on public.rolagens_jogadores_publicas;
+create policy "Admin apaga rolagens publicas de jogadores"
+on public.rolagens_jogadores_publicas
+for delete
+to authenticated
+using (auth.jwt() ->> 'email' in ('netojoseluizferreira@gmail.com', 'netojoseluizferrreira@gmail.com'));
+
 create or replace function public.aumentar_perigo_subgrupo(p_subgrupo_id uuid, p_incremento integer default 1)
 returns void
 language plpgsql

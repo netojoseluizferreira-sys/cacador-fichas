@@ -164,8 +164,8 @@ const todosAtributos = atributos.flatMap((grupo) => grupo.itens);
 const todasHabilidades = habilidades.flatMap((grupo) => grupo.itens);
 const camposNumericos = [...todosAtributos, ...todasHabilidades].map(([id]) => id);
 
-const $ = (id) => document.getElementById(id);
-
+// Configuração e autenticação ficam isoladas em funções pequenas para que
+// chamadas de Supabase não se espalhem pelo restante da aplicação.
 function configSupabase() {
   return window.CACADOR_SUPABASE || {};
 }
@@ -205,10 +205,10 @@ function formatarDataCurta(data) {
 }
 
 async function carregarCatalogo() {
-  const resposta = await fetch("catalogo.json", { cache: "no-store" });
+  const resposta = await fetch("data/catalogo.json", { cache: "no-store" });
 
   if (!resposta.ok) {
-    throw new Error(`catalogo.json retornou HTTP ${resposta.status}.`);
+    throw new Error(`data/catalogo.json retornou HTTP ${resposta.status}.`);
   }
 
   const catalogo = await resposta.json();
@@ -222,7 +222,7 @@ async function carregarCatalogo() {
 
 function validarCatalogo(catalogo) {
   if (!catalogo || typeof catalogo !== "object") {
-    throw new Error("catalogo.json precisa conter um objeto JSON.");
+    throw new Error("data/catalogo.json precisa conter um objeto JSON.");
   }
 
   validarListaComCusto(catalogo.vantagens, "vantagens");
@@ -230,7 +230,7 @@ function validarCatalogo(catalogo) {
   validarListaSimples(catalogo.trunfos, "trunfos");
 
   if (!catalogo.distincoesPorTrunfo || typeof catalogo.distincoesPorTrunfo !== "object") {
-    throw new Error("catalogo.json precisa conter distincoesPorTrunfo.");
+    throw new Error("data/catalogo.json precisa conter distincoesPorTrunfo.");
   }
 
   catalogo.trunfos.forEach((trunfo) => {
@@ -313,7 +313,7 @@ function mostrarErroInicializacao(erro) {
 
   const aviso = document.createElement("p");
   aviso.className = "catalogo-descricao erro";
-  aviso.textContent = `Não foi possível carregar catalogo.json. Rode a página por um servidor local e confira se o JSON é válido. Detalhe: ${erro.message}`;
+  aviso.textContent = `Não foi possível carregar data/catalogo.json. Rode a página por um servidor local e confira se o JSON é válido. Detalhe: ${erro.message}`;
   document.querySelector(".menu-card").appendChild(aviso);
 }
 
@@ -350,7 +350,7 @@ async function inicializarSupabase() {
 
 function exigirLogin() {
   if (!supabaseClient) {
-    alert("Configure supabase-config.js com a URL e anon key do seu projeto Supabase.");
+    alert("Configure config/supabase-config.js com a URL e anon key do seu projeto Supabase.");
     return false;
   }
 
@@ -381,7 +381,7 @@ function credenciaisAuth() {
 
 async function loginEmail() {
   if (!supabaseClient) {
-    alert("Supabase ainda nÃ£o estÃ¡ configurado. Preencha supabase-config.js.");
+    alert("Supabase ainda nÃ£o estÃ¡ configurado. Preencha config/supabase-config.js.");
     return;
   }
 
@@ -403,7 +403,7 @@ async function loginEmail() {
 
 async function criarContaEmail() {
   if (!supabaseClient) {
-    alert("Supabase ainda nÃ£o estÃ¡ configurado. Preencha supabase-config.js.");
+    alert("Supabase ainda nÃ£o estÃ¡ configurado. Preencha config/supabase-config.js.");
     return;
   }
 
@@ -470,6 +470,8 @@ function atualizarAuthInterface() {
   });
 }
 
+// Persistência online: mantém a montagem da ficha centralizada e evita que
+// cada tela precise conhecer o formato da tabela `fichas`.
 async function salvarFichaOnline() {
   if (!exigirLogin()) {
     return;
@@ -658,6 +660,8 @@ async function atualizarAdmin() {
   await atualizarRolagensPublicasCronica();
 }
 
+// Escudo do Mestre: concentra operações administrativas para manter as regras
+// de mestre separadas da criação/gerenciamento normal dos jogadores.
 async function carregarEscudoMestre() {
   if (!usuarioEhAdmin()) {
     return;
@@ -1049,6 +1053,8 @@ function rolagemBancoHtml(item, privada = false) {
   `;
 }
 
+// Histórico compartilhado: rolagens dos jogadores são publicadas em tabela
+// própria para que a mesa veja dados sem abrir fichas privadas de outros.
 function rolagemJogadorPublicaHtml(item) {
   const resultado = item.resultado || item;
   const dados = Array.isArray(resultado.dados) ? resultado.dados : [];
@@ -2046,6 +2052,8 @@ function atualizarTrava() {
   $("importarJsonBtn").disabled = false;
 }
 
+// A ficha exportada/salva nasce de um único ponto, reduzindo divergência entre
+// preview, JSON local e registro salvo no Supabase.
 function montarFicha() {
   const ficha = {
     sistema: "Caçador: A Revanche 5ª Edição",
@@ -2483,6 +2491,8 @@ function renderTrilhaDano(trilha, containerId, estadoId) {
   $(estadoId).textContent = resumoDanoTexto(trilha);
 }
 
+// Dano tem renderização própria porque suas caixas possuem regras de clique e
+// recuperação diferentes dos demais campos editáveis.
 function renderDano() {
   renderTrilhaDano("vitalidade", "vitalidadeCaixas", "vitalidadeEstado");
   renderTrilhaDano("vontade", "vontadeCaixas", "vontadeEstado");
@@ -2493,15 +2503,6 @@ function renderDano() {
   document.querySelectorAll("[data-dano-trilha]").forEach((botao) => {
     botao.addEventListener("click", () => alternarCaixaDano(botao.dataset.danoTrilha, Number(botao.dataset.danoIndex)));
   });
-}
-
-function escaparHtml(texto) {
-  return String(texto ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 
 function popularSelectCaracteristicas(select, itens) {
@@ -2641,6 +2642,8 @@ function formatarDataRolagem(data) {
   return dataObj.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+// Rolagens locais ficam na ficha; rolagens públicas são sincronizadas à parte
+// para alimentar o histórico da crônica.
 function renderRolagens() {
   $("historicoRolagens").innerHTML = state.rolagens.length
     ? state.rolagens.slice().reverse().map((item) => rolagemHistoricoHtml(item)).join("")
@@ -2934,6 +2937,8 @@ function gastarXp() {
   autoSalvar();
 }
 
+// Finalização é a fronteira entre criação livre e avanço por XP; por isso a
+// validação roda antes de travar a mecânica da ficha.
 function finalizarFicha() {
   const { erros } = validarFicha();
   if (erros.length) {
@@ -3134,6 +3139,8 @@ function novaFicha() {
   iniciarCriacao();
 }
 
+// Atualização agregada usada após mudanças amplas, como carregar ficha ou
+// gastar XP. Telas menores chamam renders específicos quando possível.
 function atualizarTudo() {
   atualizarModoInterface();
   renderListas();
@@ -3158,6 +3165,8 @@ function atualizarXpAlvosPreservando() {
   atualizarCustoXp();
 }
 
+// Eventos são registrados em um único lugar para facilitar conferir IDs do HTML
+// e evitar listeners duplicados após troca de tela.
 function inicializarEventos() {
   document.querySelectorAll("[data-step-target]").forEach((botao) => {
     botao.addEventListener("click", () => setEtapa(botao.dataset.stepTarget));

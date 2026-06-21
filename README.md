@@ -4,7 +4,7 @@ Aplicacao web estatica para criar, salvar e consultar fichas de **Cacador: A Rev
 
 ## Como rodar localmente
 
-Use um servidor local, porque o app carrega `catalogo.json` via `fetch`.
+Use um servidor local, porque o app carrega `data/catalogo.json` via `fetch`.
 
 ```powershell
 python -m http.server 8123 --bind 127.0.0.1
@@ -32,7 +32,7 @@ O app usa Supabase para:
 - Subgrupos de cronica com valores de Desespero e Perigo visiveis nas fichas dos jogadores daquele subgrupo.
 - Rolagem de Impeto usa Dados de Desespero separados; se sair 1 em Desespero, pergunta se o teste passou antes de aplicar Perigo ou Aflicao.
 
-Configure [supabase-config.js](./supabase-config.js):
+Configure [config/supabase-config.js](./config/supabase-config.js):
 
 ```js
 window.CACADOR_SUPABASE = {
@@ -42,7 +42,7 @@ window.CACADOR_SUPABASE = {
 };
 ```
 
-Rode o SQL de [supabase-schema.sql](./supabase-schema.sql) no SQL Editor do Supabase. Sempre que este arquivo mudar, rode novamente no Supabase para criar/atualizar as tabelas e politicas.
+Rode o SQL de [database/supabase-schema.sql](./database/supabase-schema.sql) no SQL Editor do Supabase. Sempre que este arquivo mudar, rode novamente no Supabase para criar/atualizar as tabelas e politicas.
 
 No Supabase, em **Authentication > Providers > Email**, deixe o provider Email ativado e desative **Confirm email** para evitar envio de email. Assim o app usa cadastro/login com senha e nao depende de magic link.
 
@@ -78,11 +78,13 @@ https://netojoseluizferreira-sys.github.io/cacador-fichas/
 
 Adicione essa URL no Supabase para login, cadastro e redirecionamentos do Auth.
 
-## Arquivos principais
+## Estrutura
 
-- `index.html`: interface.
-- `style.css`: estilos.
-- `app.js`: regras da ficha, rolagens, danos e Supabase.
-- `catalogo.json`: vantagens, defeitos, trunfos e distincoes.
-- `supabase-config.js`: configuracao publica do Supabase.
-- `supabase-schema.sql`: tabela e politicas RLS.
+- `index.html`: interface principal.
+- `assets/css/style.css`: estilos.
+- `config/supabase-config.js`: configuracao publica do Supabase.
+- `data/catalogo.json`: vantagens, defeitos, trunfos e distincoes.
+- `database/supabase-schema.sql`: tabelas e politicas RLS.
+- `src/app.js`: regras da ficha, rolagens, danos, XP, Escudo e Supabase.
+- `src/utils/`: utilitarios pequenos sem regra de negocio.
+- `src/modulos/`: espaco reservado para extrair dominios maiores sem misturar responsabilidades.

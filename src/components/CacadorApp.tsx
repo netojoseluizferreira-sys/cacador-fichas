@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
+  Cloud,
+  CloudOff,
   Crosshair,
   Download,
   FileJson,
   FolderOpen,
   Home,
+  Loader2,
   Lock,
   LogOut,
   PlusCircle,
@@ -128,6 +131,18 @@ export function CacadorApp() {
   const [fichaAtualId, setFichaAtualId] = useState<string | null>(null);
   const [adminEditandoFicha, setAdminEditandoFicha] = useState(false);
   const [salvandoOnline, setSalvandoOnline] = useState(false);
+  const [statusNuvem, setStatusNuvem] = useState<
+    "idle" | "pendente" | "salvando" | "salvo" | "erro"
+  >("idle");
+
+  const fichaAtualIdRef = useRef<string | null>(null);
+  const timerAutoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emVooSaveRef = useRef(false);
+  const filaSaveRef = useRef<FichaDados | null>(null);
+
+  useEffect(() => {
+    fichaAtualIdRef.current = fichaAtualId;
+  }, [fichaAtualId]);
 
   const [subgrupoCronica, setSubgrupoCronica] = useState({
     id: "",
@@ -215,29 +230,117 @@ export function CacadorApp() {
     [subgrupoCronica]
   );
 
+  const persistirNaNuvem = useCallback(
+    async (dadosParaSalvar: FichaDados): Promise<string | null> => {
+      if (!user) return null;
+
+      if (emVooSaveRef.current) {
+        filaSaveRef.current = dadosParaSalvar;
+        return fichaAtualIdRef.current;
+      }
+
+      emVooSaveRef.current = true;
+      setStatusNuvem("salvando");
+
+      try {
+        const idExistente = fichaAtualIdRef.current;
+        const url = idExistente ? `/api/fichas/${idExistente}` : "/api/fichas";
+        const method = idExistente ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dados: dadosParaSalvar }),
+        });
+
+        if (!res.ok) {
+          setStatusNuvem("erro");
+          return idExistente;
+        }
+
+        const json = await res.json();
+        const idRetornado: string | null =
+          json.ficha?.id ?? idExistente ?? null;
+
+        if (idRetornado && idRetornado !== fichaAtualIdRef.current) {
+          fichaAtualIdRef.current = idRetornado;
+          setFichaAtualId(idRetornado);
+        }
+
+        setStatusNuvem("salvo");
+        return idRetornado;
+      } catch {
+        setStatusNuvem("erro");
+        return fichaAtualIdRef.current;
+      } finally {
+        emVooSaveRef.current = false;
+        if (filaSaveRef.current) {
+          const proximo = filaSaveRef.current;
+          filaSaveRef.current = null;
+          void persistirNaNuvem(proximo);
+        }
+      }
+    },
+    [user]
+  );
+
+  const agendarAutoSave = useCallback(
+    (dadosSincronizados: FichaDados) => {
+      if (!user || modoTela === "menu" || modoTela === "admin") return;
+
+      const temConteudoMinimo =
+        Boolean(fichaAtualIdRef.current) ||
+        Boolean(dadosSincronizados.identidade.nome.trim()) ||
+        Boolean(dadosSincronizados.identidade.conceito.trim()) ||
+        Boolean(dadosSincronizados.estado.finalizada);
+
+      if (!temConteudoMinimo) return;
+
+      setStatusNuvem("pendente");
+      if (timerAutoSaveRef.current) {
+        clearTimeout(timerAutoSaveRef.current);
+      }
+      timerAutoSaveRef.current = setTimeout(() => {
+        timerAutoSaveRef.current = null;
+        void persistirNaNuvem(dadosSincronizados);
+      }, 1500);
+    },
+    [user, modoTela, persistirNaNuvem]
+  );
+
+  const descarregarAutoSavePendente = useCallback(
+    (dadosAtuais: FichaDados) => {
+      if (timerAutoSaveRef.current) {
+        clearTimeout(timerAutoSaveRef.current);
+        timerAutoSaveRef.current = null;
+        if (user && modoTela !== "menu" && modoTela !== "admin") {
+          void persistirNaNuvem(montarFichaSincronizada(dadosAtuais));
+        }
+      }
+    },
+    [user, modoTela, persistirNaNuvem, montarFichaSincronizada]
+  );
+
   const atualizarFichaLocal = useCallback(
     (nova: FichaDados) => {
       const sincronizada = montarFichaSincronizada(nova);
       setFicha(sincronizada);
       salvarLocal(sincronizada);
+      agendarAutoSave(sincronizada);
     },
-    [montarFichaSincronizada, salvarLocal]
+    [montarFichaSincronizada, salvarLocal, agendarAutoSave]
   );
 
   const salvarOnlineSilencioso = useCallback(
     async (dadosParaSalvar: FichaDados) => {
-      if (!user || !fichaAtualId || modoTela === "admin") return;
-      try {
-        await fetch(`/api/fichas/${fichaAtualId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dados: dadosParaSalvar }),
-        });
-      } catch {
-        // Silencioso
+      if (!user || modoTela === "admin") return;
+      if (timerAutoSaveRef.current) {
+        clearTimeout(timerAutoSaveRef.current);
+        timerAutoSaveRef.current = null;
       }
+      await persistirNaNuvem(dadosParaSalvar);
     },
-    [user, fichaAtualId, modoTela]
+    [user, modoTela, persistirNaNuvem]
   );
 
   const atualizarFichaEPersistir = useCallback(
@@ -288,27 +391,11 @@ export function CacadorApp() {
       salvarLocal(sincronizada);
 
       if (user && modoTela !== "admin") {
-        let idParaRolagem = fichaAtualId;
-        if (!idParaRolagem) {
-          try {
-            const resCriar = await fetch("/api/fichas", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ dados: sincronizada }),
-            });
-            if (resCriar.ok) {
-              const jsonCriar = await resCriar.json();
-              idParaRolagem = jsonCriar.ficha?.id ?? null;
-              if (idParaRolagem) {
-                setFichaAtualId(idParaRolagem);
-              }
-            }
-          } catch {
-            // Silencioso
-          }
-        } else {
-          await salvarOnlineSilencioso(sincronizada);
+        if (timerAutoSaveRef.current) {
+          clearTimeout(timerAutoSaveRef.current);
+          timerAutoSaveRef.current = null;
         }
+        const idParaRolagem = await persistirNaNuvem(sincronizada);
 
         if (rolagemPublicar && idParaRolagem) {
           try {
@@ -338,9 +425,8 @@ export function CacadorApp() {
       montarFichaSincronizada,
       salvarLocal,
       user,
-      fichaAtualId,
       modoTela,
-      salvarOnlineSilencioso,
+      persistirNaNuvem,
     ]
   );
 
@@ -400,7 +486,13 @@ export function CacadorApp() {
     }
     const vazia = criarFichaVazia();
     localStorage.removeItem(STORAGE_KEY);
+    if (timerAutoSaveRef.current) {
+      clearTimeout(timerAutoSaveRef.current);
+      timerAutoSaveRef.current = null;
+    }
+    fichaAtualIdRef.current = null;
     setFichaAtualId(null);
+    setStatusNuvem("idle");
     setAdminEditandoFicha(false);
     setSubgrupoCronica({ id: "", nome: "", desespero: 0, perigo: 0 });
     setFicha(vazia);
@@ -460,7 +552,9 @@ export function CacadorApp() {
       fichaCarregada.estados.subgrupoCronica = sub.nome;
 
       const ehAdminEdit = Boolean(opcoes?.adminEdit && user.isAdmin);
+      fichaAtualIdRef.current = data.ficha.id;
       setFichaAtualId(data.ficha.id);
+      setStatusNuvem("salvo");
       setSubgrupoCronica(sub);
       setAdminEditandoFicha(ehAdminEdit);
       setFicha(fichaCarregada);
@@ -503,31 +597,21 @@ export function CacadorApp() {
       notificar("Entre com sua conta antes de salvar online.", "erro");
       return;
     }
+    if (timerAutoSaveRef.current) {
+      clearTimeout(timerAutoSaveRef.current);
+      timerAutoSaveRef.current = null;
+    }
     setSalvandoOnline(true);
     try {
       const sincronizada = montarFichaSincronizada(ficha);
-      const url = fichaAtualId
-        ? `/api/fichas/${fichaAtualId}`
-        : "/api/fichas";
-      const method = fichaAtualId ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dados: sincronizada }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        notificar(data.error || "Erro ao salvar ficha online.", "erro");
-        return;
+      const idSalvo = await persistirNaNuvem(sincronizada);
+      if (idSalvo) {
+        setFicha(sincronizada);
+        salvarLocal(sincronizada);
+        notificar("Ficha salva na nuvem com sucesso.", "sucesso");
+      } else {
+        notificar("Erro ao salvar ficha online.", "erro");
       }
-
-      setFichaAtualId(data.ficha.id);
-      setFicha(sincronizada);
-      salvarLocal(sincronizada);
-      notificar("Ficha salva online com sucesso.", "sucesso");
-    } catch {
-      notificar("Erro de rede ao salvar ficha online.", "erro");
     } finally {
       setSalvandoOnline(false);
     }
@@ -709,10 +793,49 @@ export function CacadorApp() {
             )}
           </div>
 
-          {modoTela !== "menu" && (
+            {modoTela !== "menu" && (
             <div className="flex flex-wrap items-center gap-2">
               {modoTela !== "admin" && (
                 <>
+                  {/* Indicador de Auto-Save na Nuvem */}
+                  {user && statusNuvem !== "idle" && (
+                    <button
+                      type="button"
+                      onClick={salvarFichaOnlineManual}
+                      title="Status do salvamento automático (clique para salvar agora)"
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition cursor-pointer ${
+                        statusNuvem === "erro"
+                          ? "bg-red-950/70 border-red-700/70 text-red-200"
+                          : statusNuvem === "salvando" ||
+                              statusNuvem === "pendente"
+                            ? "bg-zinc-900 border-zinc-800 text-amber-300"
+                            : "bg-zinc-950 border-zinc-800 text-emerald-400"
+                      }`}
+                    >
+                      {statusNuvem === "salvando" ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span className="hidden sm:inline">Salvando...</span>
+                        </>
+                      ) : statusNuvem === "pendente" ? (
+                        <>
+                          <Cloud className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Auto-save...</span>
+                        </>
+                      ) : statusNuvem === "erro" ? (
+                        <>
+                          <CloudOff className="w-3.5 h-3.5" />
+                          <span>Tentar salvar</span>
+                        </>
+                      ) : (
+                        <>
+                          <Cloud className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Salvo</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     disabled={!user || salvandoOnline}
@@ -787,6 +910,7 @@ export function CacadorApp() {
                 <button
                   type="button"
                   onClick={() => {
+                    descarregarAutoSavePendente(ficha);
                     setAdminEditandoFicha(false);
                     setModoTela("admin");
                   }}
@@ -800,6 +924,7 @@ export function CacadorApp() {
               <button
                 type="button"
                 onClick={() => {
+                  descarregarAutoSavePendente(ficha);
                   setAdminEditandoFicha(false);
                   setModoTela("menu");
                 }}

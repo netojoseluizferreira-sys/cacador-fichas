@@ -11,7 +11,7 @@ import {
   rolagensPublicas,
 } from "@/db/schema";
 import { obterEmailAdmin, obterUsuarioSessao } from "@/lib/auth";
-import type { VisibilidadeIniciativa } from "@/types/ficha";
+import type { AmeacaCronica, VisibilidadeIniciativa } from "@/types/ficha";
 
 const ItemIniciativaSchema = z.object({
   id: z.string(),
@@ -24,6 +24,30 @@ const ItemIniciativaSchema = z.object({
   visivel: z.boolean().optional(),
 });
 
+const ParadaExtraSchema = z.object({
+  id: z.string(),
+  nome: z.string(),
+  dados: z.number().int().min(0).max(50),
+});
+
+const AmeacaSchema = z.object({
+  id: z.string(),
+  nome: z.string(),
+  categoria: z.string().default("Presa / Monstro"),
+  dificuldadePadrao: z.string().default("4 / 2"),
+  paradaFisico: z.number().int().min(0).max(50).default(4),
+  paradaSocial: z.number().int().min(0).max(50).default(3),
+  paradaMental: z.number().int().min(0).max(50).default(4),
+  paradasExtras: z.array(ParadaExtraSchema).default([]),
+  vitalidadeMax: z.number().int().min(1).max(30).default(6),
+  vitalidadeDano: z.array(z.enum(["", "/", "X"])).default([]),
+  vontadeMax: z.number().int().min(0).max(30).default(4),
+  vontadeDano: z.array(z.enum(["", "/", "X"])).default([]),
+  poderes: z.string().default(""),
+  fraquezas: z.string().default(""),
+  notas: z.string().default(""),
+});
+
 const SalvarEscudoSchema = z.object({
   ficha_ids: z.array(z.uuid()).default([]),
   notas: z.string().default(""),
@@ -33,6 +57,7 @@ const SalvarEscudoSchema = z.object({
     .enum(["total", "parcial", "invisivel"])
     .default("invisivel"),
   iniciativa_definida: z.boolean().default(false),
+  ameacas: z.array(AmeacaSchema).optional(),
 });
 
 function normalizarVisibilidade(val?: string | null): VisibilidadeIniciativa {
@@ -77,6 +102,7 @@ export async function GET() {
           turno: 0,
           iniciativaVisibilidade: "invisivel",
           iniciativaDefinida: false,
+          ameacas: [],
         })
         .returning();
     }
@@ -137,6 +163,7 @@ export async function GET() {
           escudo.iniciativaVisibilidade
         ),
         iniciativa_definida: Boolean(escudo.iniciativaDefinida),
+        ameacas: Array.isArray(escudo.ameacas) ? escudo.ameacas : [],
       },
       fichas: todasFichas,
       subgrupos,
@@ -181,6 +208,21 @@ export async function PUT(request: Request) {
     }
 
     const db = getDb();
+    const camposSet: Partial<typeof escudoMestre.$inferInsert> = {
+      mestreEmail: obterEmailAdmin(),
+      fichaIds: parsed.data.ficha_ids,
+      notas: parsed.data.notas,
+      iniciativa: parsed.data.iniciativa,
+      turno: parsed.data.turno,
+      iniciativaVisibilidade: parsed.data.iniciativa_visibilidade,
+      iniciativaDefinida: parsed.data.iniciativa_definida,
+      updatedAt: new Date(),
+    };
+
+    if (parsed.data.ameacas !== undefined) {
+      camposSet.ameacas = parsed.data.ameacas as AmeacaCronica[];
+    }
+
     const [atualizado] = await db
       .insert(escudoMestre)
       .values({
@@ -192,20 +234,12 @@ export async function PUT(request: Request) {
         turno: parsed.data.turno,
         iniciativaVisibilidade: parsed.data.iniciativa_visibilidade,
         iniciativaDefinida: parsed.data.iniciativa_definida,
+        ameacas: (parsed.data.ameacas ?? []) as AmeacaCronica[],
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
         target: escudoMestre.id,
-        set: {
-          mestreEmail: obterEmailAdmin(),
-          fichaIds: parsed.data.ficha_ids,
-          notas: parsed.data.notas,
-          iniciativa: parsed.data.iniciativa,
-          turno: parsed.data.turno,
-          iniciativaVisibilidade: parsed.data.iniciativa_visibilidade,
-          iniciativaDefinida: parsed.data.iniciativa_definida,
-          updatedAt: new Date(),
-        },
+        set: camposSet,
       })
       .returning();
 
@@ -219,6 +253,7 @@ export async function PUT(request: Request) {
           atualizado.iniciativaVisibilidade
         ),
         iniciativa_definida: Boolean(atualizado.iniciativaDefinida),
+        ameacas: Array.isArray(atualizado.ameacas) ? atualizado.ameacas : [],
       },
     });
   } catch (erro) {

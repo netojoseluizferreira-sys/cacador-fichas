@@ -98,6 +98,9 @@ export interface RegistroRolagemFicha {
   impetoPassou?: boolean | null;
   aflicao?: boolean;
   resolucaoImpeto?: "aflicao" | "perigo" | null;
+  reroladoVontade?: boolean;
+  dadosAnteriores?: number[];
+  especializacaoUsada?: string;
 }
 
 export interface ResultadoRolagemMestre {
@@ -254,6 +257,36 @@ export interface SubgrupoCronica {
   updated_at?: string;
 }
 
+export type CategoriaAmeaca =
+  | "Presa / Monstro"
+  | "Rival / Org"
+  | "PdM / Aliado"
+  | "Capanga / Grupo";
+
+export interface ParadaExtraAmeaca {
+  id: string;
+  nome: string;
+  dados: number;
+}
+
+export interface AmeacaCronica {
+  id: string;
+  nome: string;
+  categoria: CategoriaAmeaca | string;
+  dificuldadePadrao: string;
+  paradaFisico: number;
+  paradaSocial: number;
+  paradaMental: number;
+  paradasExtras: ParadaExtraAmeaca[];
+  vitalidadeMax: number;
+  vitalidadeDano: MarcadorDano[];
+  vontadeMax: number;
+  vontadeDano: MarcadorDano[];
+  poderes: string;
+  fraquezas: string;
+  notas: string;
+}
+
 export interface EscudoMestreEstado {
   ficha_ids: string[];
   notas: string;
@@ -261,6 +294,7 @@ export interface EscudoMestreEstado {
   turno: number;
   iniciativa_visibilidade: VisibilidadeIniciativa;
   iniciativa_definida: boolean;
+  ameacas: AmeacaCronica[];
 }
 
 export interface FichaResumoOnline {

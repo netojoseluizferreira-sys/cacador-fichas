@@ -2,6 +2,7 @@ import type {
   AtributoId,
   FichaDados,
   HabilidadeId,
+  MarcadorDano,
   RegistroRolagemFicha,
   ResultadoRolagemMestre,
   TipoRolagemBase,
@@ -14,6 +15,7 @@ import {
 import {
   contarDano,
   dadosDisponiveisTrilha,
+  normalizarTrilha,
   totalCaixasVitalidade,
   totalCaixasVontade,
 } from "./dano";
@@ -82,12 +84,67 @@ export function textoTipoRolagem(tipo?: string): string {
   return (tipo && nomes[tipo]) || "Rolagem";
 }
 
+function normalizarComparacao(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+export function obterEspecializacoesDaHabilidade(
+  ficha: FichaDados,
+  habilidade: HabilidadeId
+): { sugeridas: string[]; outrasLivres: string[] } {
+  const sugeridas: string[] = [];
+  const outrasLivres: string[] = [];
+
+  const fixas: Partial<
+    Record<HabilidadeId, keyof FichaDados["especializacoes"]>
+  > = {
+    ciencia: "ciencia",
+    academicos: "academicos",
+    oficios: "oficios",
+    performance: "performance",
+  };
+
+  const chaveFixa = fixas[habilidade];
+  if (chaveFixa) {
+    const val = ficha.especializacoes[chaveFixa]?.trim();
+    if (val) {
+      val
+        .split(/[;\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .forEach((s) => sugeridas.push(s));
+    }
+  }
+
+  const nomeSkillNorm = normalizarComparacao(nomePorId(habilidade));
+  const entradasLivres = (ficha.especializacoes.livre || "")
+    .split(/[;\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  for (const entrada of entradasLivres) {
+    if (normalizarComparacao(entrada).includes(nomeSkillNorm)) {
+      if (!sugeridas.includes(entrada)) sugeridas.push(entrada);
+    } else {
+      outrasLivres.push(entrada);
+    }
+  }
+
+  return { sugeridas, outrasLivres };
+}
+
 export interface ConfigParadaRolagem {
   tipo: TipoRolagemBase;
   atributo1: AtributoId;
   atributo2: AtributoId;
   habilidade: HabilidadeId;
   bonus: number;
+  usarEspecializacao?: boolean;
+  nomeEspecializacao?: string;
 }
 
 export function calcularParadaRolagem(
@@ -95,6 +152,9 @@ export function calcularParadaRolagem(
   config: ConfigParadaRolagem
 ) {
   const bonus = Math.round(Number(config.bonus || 0));
+  const bonusEspecializacao =
+    config.tipo === "atributoHabilidade" && config.usarEspecializacao ? 1 : 0;
+
   let base = 0;
   let descricao = "";
 
@@ -103,6 +163,12 @@ export function calcularParadaRolagem(
     const valHab = obterValorHabilidade(ficha, config.habilidade);
     base = valAttr + valHab;
     descricao = `${nomePorId(config.atributo1)} ${valAttr} + ${nomePorId(config.habilidade)} ${valHab}`;
+    if (bonusEspecializacao > 0) {
+      const labelSpec = config.nomeEspecializacao?.trim();
+      descricao += labelSpec
+        ? ` + Especialização (${labelSpec}) +1`
+        : " + Especialização +1";
+    }
   } else if (config.tipo === "atributoAtributo") {
     const val1 = obterValorAtributo(ficha, config.atributo1);
     const val2 = obterValorAtributo(ficha, config.atributo2);
@@ -120,11 +186,12 @@ export function calcularParadaRolagem(
     descricao = `Força de Vontade ${base} (${totalVon} caixas, ${agravado} agravada(s) desconsiderada(s))`;
   }
 
-  const total = Math.max(0, base + bonus);
+  const total = Math.max(0, base + bonusEspecializacao + bonus);
   return {
     tipo: config.tipo,
     base,
     bonus,
+    bonusEspecializacao,
     total,
     descricao: `${descricao}${textoBonusRolagem(bonus)}`,
   };
@@ -192,6 +259,10 @@ export function executarRolagemFicha(
     subgrupoId: opcoes.subgrupo.id || "",
     subgrupoNome: opcoes.subgrupo.nome || "",
     perigoIncrementado: false,
+    especializacaoUsada:
+      config.tipo === "atributoHabilidade" && config.usarEspecializacao
+        ? config.nomeEspecializacao?.trim() || "Ativa"
+        : undefined,
     ...calculado,
   };
 
@@ -200,6 +271,173 @@ export function executarRolagemFicha(
   copia.estado.ultimaAtualizacao = new Date().toISOString();
 
   return { ok: true, rolagem, ficha: copia };
+}
+
+function marcarUmGastoVontade(
+  caixasAtuais: ReadonlyArray<string>,
+  total: number
+): { ok: true; caixas: MarcadorDano[] } | { ok: false; erro: string } {
+  const caixas = normalizarTrilha(caixasAtuais, total);
+  const idxVazia = caixas.findIndex((c) => c === "");
+  if (idxVazia !== -1) {
+    caixas[idxVazia] = "/";
+    return { ok: true, caixas };
+  }
+  const idxSuperficial = caixas.findIndex((c) => c === "/");
+  if (idxSuperficial !== -1) {
+    caixas[idxSuperficial] = "X";
+    return { ok: true, caixas };
+  }
+  return {
+    ok: false,
+    erro: "Força de Vontade está totalmente agravada — não é possível gastar Vontade para re-rolar.",
+  };
+}
+
+/**
+ * Regra Oficial 5e: Gastar 1 ponto de Força de Vontade (marca 1 dano superficial '/')
+ * para re-rolar até 3 dados normais, sem poder tocar nos Dados de Desespero.
+ */
+export function rerolarDadosComVontade(
+  ficha: FichaDados,
+  rolagemId: string,
+  indicesParaRerolar: number[]
+):
+  | {
+      ok: true;
+      ficha: FichaDados;
+      rolagemAtualizada: RegistroRolagemFicha;
+    }
+  | { ok: false; erro: string } {
+  const copia: FichaDados = structuredClone(ficha);
+  const item = copia.rolagens.find((r) => r.id === rolagemId);
+  if (!item) {
+    return { ok: false, erro: "Rolagem não encontrada nesta ficha." };
+  }
+  if (item.reroladoVontade) {
+    return {
+      ok: false,
+      erro: "Esta rolagem já utilizou re-rolagem de Força de Vontade.",
+    };
+  }
+  if (item.aflicao) {
+    return {
+      ok: false,
+      erro: "Não é possível re-rolar um teste já encerrado em Aflição.",
+    };
+  }
+
+  const unicos = [...new Set(indicesParaRerolar)].filter(
+    (idx) => Number.isInteger(idx) && idx >= 0 && idx < item.dados.length
+  );
+
+  if (unicos.length < 1 || unicos.length > 3) {
+    return {
+      ok: false,
+      erro: "Selecione entre 1 e 3 dados normais para re-rolar.",
+    };
+  }
+
+  const maxVon = totalCaixasVontade(copia);
+  const gasto = marcarUmGastoVontade(copia.dano.vontade, maxVon);
+  if (!gasto.ok) {
+    return gasto;
+  }
+
+  const dadosAntigos = [...item.dados];
+  const novosDadosNormais = [...item.dados];
+  for (const idx of unicos) {
+    novosDadosNormais[idx] = rolarD10(1)[0];
+  }
+
+  const dadosDesespero = Array.isArray(item.dadosDesespero)
+    ? item.dadosDesespero
+    : [];
+
+  if (item.impeto) {
+    const calc = resultadoImpeto(novosDadosNormais, dadosDesespero);
+    item.dados = calc.dados;
+    item.sucessosBase = calc.sucessosBase;
+    item.dezenas = calc.dezenas;
+    item.paresDez = calc.paresDez;
+    item.sucessosExtras = calc.sucessosExtras;
+    item.sucessos = calc.sucessos;
+    item.critico = calc.critico;
+  } else {
+    const calc = resultadoRolagem(novosDadosNormais);
+    item.dados = calc.dados;
+    item.sucessosBase = calc.sucessosBase;
+    item.dezenas = calc.dezenas;
+    item.paresDez = calc.paresDez;
+    item.sucessosExtras = calc.sucessosExtras;
+    item.sucessos = calc.sucessos;
+    item.critico = calc.critico;
+  }
+
+  item.dadosAnteriores = dadosAntigos;
+  item.reroladoVontade = true;
+  if (!item.descricao.includes("[Re-rolado c/ Vontade]")) {
+    item.descricao = `${item.descricao} [Re-rolado c/ Vontade]`;
+  }
+
+  copia.dano.vontade = gasto.caixas;
+  copia.estado.ultimaAtualizacao = new Date().toISOString();
+
+  return { ok: true, ficha: copia, rolagemAtualizada: item };
+}
+
+/**
+ * Permite acionar/forçar Ímpeto (Dados de Desespero) após uma rolagem normal,
+ * adicionando os Dados de Desespero do subgrupo (ou ao menos 1 dado se Desespero for 0).
+ */
+export function adicionarDadosDesesperoNaRolagem(
+  ficha: FichaDados,
+  rolagemId: string,
+  subgrupo: ContextoSubgrupoRolagem
+):
+  | {
+      ok: true;
+      ficha: FichaDados;
+      rolagemAtualizada: RegistroRolagemFicha;
+    }
+  | { ok: false; erro: string } {
+  const copia: FichaDados = structuredClone(ficha);
+  const item = copia.rolagens.find((r) => r.id === rolagemId);
+  if (!item) {
+    return { ok: false, erro: "Rolagem não encontrada nesta ficha." };
+  }
+  if (item.impeto) {
+    return {
+      ok: false,
+      erro: "Esta rolagem já utilizou Dados de Desespero.",
+    };
+  }
+
+  const qtdDesespero = Math.max(1, Math.round(subgrupo.desespero || 1));
+  const dadosDesespero = rolarD10(qtdDesespero);
+  const calc = resultadoImpeto(item.dados, dadosDesespero);
+
+  item.tipo = "impeto";
+  item.impeto = true;
+  item.dadosDesespero = calc.dadosDesespero;
+  item.desesperoOnes = calc.desesperoOnes;
+  item.sucessosBase = calc.sucessosBase;
+  item.dezenas = calc.dezenas;
+  item.paresDez = calc.paresDez;
+  item.sucessosExtras = calc.sucessosExtras;
+  item.sucessos = calc.sucessos;
+  item.critico = calc.critico;
+  item.totalDados = item.dados.length + dadosDesespero.length;
+  item.subgrupoId = subgrupo.id || item.subgrupoId || "";
+  item.subgrupoNome = subgrupo.nome || item.subgrupoNome || "";
+  item.impetoPassou = null;
+  item.aflicao = false;
+  item.resolucaoImpeto = null;
+  item.descricao = `${item.descricao} + Ímpeto (${qtdDesespero} Dado(s) de Desespero)`;
+
+  copia.estado.ultimaAtualizacao = new Date().toISOString();
+
+  return { ok: true, ficha: copia, rolagemAtualizada: item };
 }
 
 export function resolverTesteImpeto(

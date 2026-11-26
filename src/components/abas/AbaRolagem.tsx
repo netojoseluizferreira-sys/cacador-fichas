@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Dices, Flame } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Award, Dices, Flame } from "lucide-react";
 import {
   HistoricoCentralizado,
   type RolagemJogadorFeedItem,
   type RolagemMestreFeedItem,
 } from "@/components/HistoricoCentralizado";
 import {
+  adicionarDadosDesesperoNaRolagem,
   calcularParadaRolagem,
   confirmarPerigoIncrementadoNaRolagem,
   executarRolagemFicha,
   marcarAflicaoNaRolagem,
+  obterEspecializacoesDaHabilidade,
+  rerolarDadosComVontade,
   resolverTesteImpeto,
   TODAS_HABILIDADES,
   TODOS_ATRIBUTOS,
@@ -55,6 +58,8 @@ export function AbaRolagem({
   const [atributo2, setAtributo2] = useState<AtributoId>("vigor");
   const [habilidade, setHabilidade] = useState<HabilidadeId>("armasBrancas");
   const [bonus, setBonus] = useState(0);
+  const [usarEspecializacao, setUsarEspecializacao] = useState(false);
+  const [nomeEspecializacao, setNomeEspecializacao] = useState("");
   const [usarImpeto, setUsarImpeto] = useState(false);
   const [resolvendoPerigoId, setResolvendoPerigoId] = useState<string | null>(
     null
@@ -71,12 +76,35 @@ export function AbaRolagem({
   >([]);
   const [carregandoFeed, setCarregandoFeed] = useState(false);
 
+  const especializacoesHabilidade = useMemo(
+    () => obterEspecializacoesDaHabilidade(ficha, habilidade),
+    [ficha, habilidade]
+  );
+
+  const handleMudarHabilidade = (novaHab: HabilidadeId) => {
+    setHabilidade(novaHab);
+    setUsarEspecializacao(false);
+    setNomeEspecializacao("");
+  };
+
+  const alternarEspecializacaoChip = (nomeSpec: string) => {
+    if (usarEspecializacao && nomeEspecializacao === nomeSpec) {
+      setUsarEspecializacao(false);
+      setNomeEspecializacao("");
+    } else {
+      setUsarEspecializacao(true);
+      setNomeEspecializacao(nomeSpec);
+    }
+  };
+
   const parada = calcularParadaRolagem(ficha, {
     tipo,
     atributo1,
     atributo2,
     habilidade,
     bonus,
+    usarEspecializacao,
+    nomeEspecializacao,
   });
 
   const carregarFeedCentralizado = useCallback(
@@ -92,7 +120,7 @@ export function AbaRolagem({
           setPublicasJogadores(data.publicasJogadores ?? []);
         }
       } catch {
-        // Silencioso em background
+        // Silencioso
       } finally {
         if (!silencioso) setCarregandoFeed(false);
       }
@@ -100,7 +128,6 @@ export function AbaRolagem({
     [autenticado]
   );
 
-  // Sincronização automática em tempo real a cada 4s quando a aba do navegador está visível
   useEffect(() => {
     carregarFeedCentralizado(false);
     if (!autenticado) return;
@@ -127,7 +154,15 @@ export function AbaRolagem({
   const handleRolar = async (comImpeto: boolean) => {
     const res = executarRolagemFicha(
       ficha,
-      { tipo, atributo1, atributo2, habilidade, bonus },
+      {
+        tipo,
+        atributo1,
+        atributo2,
+        habilidade,
+        bonus,
+        usarEspecializacao,
+        nomeEspecializacao,
+      },
       {
         usarImpeto: comImpeto,
         impetoMarcado: usarImpeto,
@@ -146,6 +181,41 @@ export function AbaRolagem({
 
     await onAtualizarFichaERolagem(res.ficha, res.rolagem);
     await carregarFeedCentralizado(true);
+  };
+
+  const handleRerolarComVontade = async (
+    rolagemId: string,
+    indices: number[]
+  ) => {
+    const res = rerolarDadosComVontade(ficha, rolagemId, indices);
+    if (!res.ok) {
+      onNotify(res.erro, "erro");
+      return;
+    }
+    await onAtualizarFichaERolagem(res.ficha, res.rolagemAtualizada);
+    await carregarFeedCentralizado(true);
+    onNotify(
+      `Re-rolagem concluída! 1 ponto de Força de Vontade superficial marcado (${res.rolagemAtualizada.sucessos} sucesso(s)).`,
+      "sucesso"
+    );
+  };
+
+  const handleForcarComDesespero = async (rolagemId: string) => {
+    const res = adicionarDadosDesesperoNaRolagem(ficha, rolagemId, {
+      id: subgrupo.id,
+      nome: subgrupo.nome,
+      desespero: subgrupo.desespero,
+    });
+    if (!res.ok) {
+      onNotify(res.erro, "erro");
+      return;
+    }
+    await onAtualizarFichaERolagem(res.ficha, res.rolagemAtualizada);
+    await carregarFeedCentralizado(true);
+    onNotify(
+      `Dados de Desespero rolados! Total de sucessos: ${res.rolagemAtualizada.sucessos}.`,
+      "info"
+    );
   };
 
   const handleResolverImpeto = async (rolagemId: string, passou: boolean) => {
@@ -230,8 +300,8 @@ export function AbaRolagem({
           Rolagem de Dados &amp; Histórico
         </h2>
         <p className="text-sm text-zinc-400 mt-1">
-          Monte sua parada e acompanhe todas as jogadas da mesa centralizadas em
-          tempo real.
+          Monte sua parada, ative Especializações (+1 dado) e re-role usando
+          Força de Vontade ou Dados de Desespero.
         </p>
       </div>
 
@@ -280,7 +350,9 @@ export function AbaRolagem({
               </label>
               <select
                 value={habilidade}
-                onChange={(e) => setHabilidade(e.target.value as HabilidadeId)}
+                onChange={(e) =>
+                  handleMudarHabilidade(e.target.value as HabilidadeId)
+                }
                 className={inputCls}
               >
                 {TODAS_HABILIDADES.map(([id, nome]) => (
@@ -323,6 +395,75 @@ export function AbaRolagem({
             />
           </div>
         </div>
+
+        {/* Barra rápida de Especializações (+1 dado) */}
+        {usaHabilidade && (
+          <div className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5 mr-1">
+                <Award className="w-3.5 h-3.5 text-[#f08b21]" />
+                Especialização:
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (usarEspecializacao && !nomeEspecializacao) {
+                    setUsarEspecializacao(false);
+                  } else {
+                    setUsarEspecializacao(true);
+                    setNomeEspecializacao("");
+                  }
+                }}
+                className={`px-3 py-1 rounded-md text-xs font-semibold border transition cursor-pointer ${
+                  usarEspecializacao && !nomeEspecializacao
+                    ? "bg-[#f08b21] text-zinc-950 border-[#f08b21]"
+                    : "bg-zinc-900 text-zinc-300 border-zinc-700 hover:border-zinc-500"
+                }`}
+              >
+                +1 Especialização
+              </button>
+
+              {especializacoesHabilidade.sugeridas.map((spec) => {
+                const ativa =
+                  usarEspecializacao && nomeEspecializacao === spec;
+                return (
+                  <button
+                    key={`sug-${spec}`}
+                    type="button"
+                    onClick={() => alternarEspecializacaoChip(spec)}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold border transition cursor-pointer ${
+                      ativa
+                        ? "bg-[#f08b21] text-zinc-950 border-[#f08b21]"
+                        : "bg-emerald-950/50 text-emerald-300 border-emerald-800/60 hover:border-emerald-600"
+                    }`}
+                  >
+                    +1 {spec}
+                  </button>
+                );
+              })}
+
+              {especializacoesHabilidade.outrasLivres.map((spec) => {
+                const ativa =
+                  usarEspecializacao && nomeEspecializacao === spec;
+                return (
+                  <button
+                    key={`liv-${spec}`}
+                    type="button"
+                    onClick={() => alternarEspecializacaoChip(spec)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium border transition cursor-pointer ${
+                      ativa
+                        ? "bg-[#f08b21] text-zinc-950 border-[#f08b21]"
+                        : "bg-zinc-900/80 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                    }`}
+                  >
+                    +1 {spec}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="p-3.5 rounded-lg bg-zinc-950 border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="text-sm text-zinc-200">
@@ -385,6 +526,8 @@ export function AbaRolagem({
         onResolverImpeto={handleResolverImpeto}
         onMarcarAflicao={handleMarcarAflicao}
         onAumentarPerigo={handleAumentarPerigo}
+        onRerolarComVontade={handleRerolarComVontade}
+        onForcarComDesespero={handleForcarComDesespero}
       />
     </section>
   );

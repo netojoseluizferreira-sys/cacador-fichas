@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   CheckCircle2,
+  Cloud,
   Dices,
   Edit3,
   Eye,
@@ -17,22 +18,27 @@ import {
   Plus,
   RefreshCw,
   Save,
+  ScanEye,
   Search,
   Shield,
   ShieldAlert,
   SkipBack,
   SkipForward,
+  Skull,
   Trash2,
   UserCog,
   Users,
 } from "lucide-react";
 import { AbaAdminContas } from "@/components/AbaAdminContas";
+import { AbaAmeacasPdms } from "@/components/AbaAmeacasPdms";
+import { AbaRaioXCelula } from "@/components/AbaRaioXCelula";
 import {
   HistoricoCentralizado,
   type RolagemJogadorFeedItem,
   type RolagemMestreFeedItem,
 } from "@/components/HistoricoCentralizado";
 import type {
+  AmeacaCronica,
   EscudoMestreEstado,
   FichaResumoOnline,
   ItemIniciativa,
@@ -48,8 +54,10 @@ interface SubgrupoEditavel extends SubgrupoCronica {
 }
 
 type AbaEscudoId =
+  | "raiox"
   | "fichas"
   | "grupos"
+  | "ameacas"
   | "rolagens"
   | "iniciativa"
   | "notas"
@@ -83,9 +91,13 @@ export function EscudoMestre({
   onEditarFichaAdmin,
   onNotify,
 }: EscudoMestreProps) {
-  const [abaAtiva, setAbaAtiva] = useState<AbaEscudoId>("fichas");
+  const [abaAtiva, setAbaAtiva] = useState<AbaEscudoId>("raiox");
   const [carregando, setCarregando] = useState(true);
   const [buscaFicha, setBuscaFicha] = useState("");
+  const [statusNotas, setStatusNotas] = useState<
+    "idle" | "pendente" | "salvo"
+  >("idle");
+  const timerNotasRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [escudo, setEscudo] = useState<EscudoMestreEstado>({
     ficha_ids: [],
@@ -94,6 +106,7 @@ export function EscudoMestre({
     turno: 0,
     iniciativa_visibilidade: "invisivel",
     iniciativa_definida: false,
+    ameacas: [],
   });
   const [todasFichas, setTodasFichas] = useState<FichaResumoOnline[]>([]);
   const [subgrupos, setSubgrupos] = useState<SubgrupoEditavel[]>([]);
@@ -152,6 +165,9 @@ export function EscudoMestre({
             iniciativa_visibilidade:
               data.escudo?.iniciativa_visibilidade ?? "invisivel",
             iniciativa_definida: Boolean(data.escudo?.iniciativa_definida),
+            ameacas: Array.isArray(data.escudo?.ameacas)
+              ? data.escudo.ameacas
+              : [],
           };
         });
 
@@ -200,14 +216,14 @@ export function EscudoMestre({
     carregarTudo(false);
   }, [carregarTudo]);
 
-  // Atualização em tempo real do histórico de rolagens quando a aba Rolagens está ativa
+  // Atualização em tempo real do Raio-X e do Histórico quando ativos
   useEffect(() => {
-    if (abaAtiva !== "rolagens") return;
+    if (abaAtiva !== "rolagens" && abaAtiva !== "raiox") return;
     const intervalo = setInterval(() => {
       if (document.visibilityState === "visible") {
         carregarTudo(true);
       }
-    }, 4000);
+    }, 4500);
     return () => clearInterval(intervalo);
   }, [abaAtiva, carregarTudo]);
 
@@ -592,9 +608,61 @@ export function EscudoMestre({
     await salvarEscudoRemoto(novoEstado);
   };
 
-  // --- Anotações ---
+  // --- Ameaças & PdMs ---
+  const salvarListaAmeacas = async (novas: AmeacaCronica[]) => {
+    const novoEstado: EscudoMestreEstado = {
+      ...escudo,
+      ameacas: novas,
+    };
+    setEscudo(novoEstado);
+    return salvarEscudoRemoto(novoEstado);
+  };
+
+  const enviarAmeacaParaIniciativa = async (
+    ameaca: AmeacaCronica,
+    visivelParcial: boolean
+  ) => {
+    const novoItem: ItemIniciativa = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+      nome: ameaca.nome,
+      detalhe: `${ameaca.categoria}${ameaca.dificuldadePadrao ? ` · Dif. ${ameaca.dificuldadePadrao}` : ""}`,
+      tipo: "npc",
+      valor: 0,
+      visivel: visivelParcial,
+    };
+    const novoEstado: EscudoMestreEstado = {
+      ...escudo,
+      iniciativa: [...escudo.iniciativa, novoItem],
+    };
+    setEscudo(novoEstado);
+    if (await salvarEscudoRemoto(novoEstado)) {
+      onNotify(`"${ameaca.nome}" enviada para a aba Iniciativa!`, "sucesso");
+    }
+  };
+
+  // --- Anotações (com Auto-Save) ---
+  const alterarAnotacoesComAutoSave = (texto: string) => {
+    const novoEstado: EscudoMestreEstado = { ...escudo, notas: texto };
+    setEscudo(novoEstado);
+    setStatusNotas("pendente");
+    if (timerNotasRef.current) {
+      clearTimeout(timerNotasRef.current);
+    }
+    timerNotasRef.current = setTimeout(async () => {
+      timerNotasRef.current = null;
+      if (await salvarEscudoRemoto(novoEstado)) {
+        setStatusNotas("salvo");
+      }
+    }, 1500);
+  };
+
   const salvarAnotacoes = async () => {
+    if (timerNotasRef.current) {
+      clearTimeout(timerNotasRef.current);
+      timerNotasRef.current = null;
+    }
     if (await salvarEscudoRemoto(escudo)) {
+      setStatusNotas("salvo");
       onNotify("Anotações do mestre salvas.", "sucesso");
     }
   };
@@ -650,16 +718,28 @@ export function EscudoMestre({
     badge?: string | number;
   }> = [
     {
+      id: "raiox",
+      label: "Raio-X da Célula",
+      icon: ScanEye,
+      badge: fichasCronica.length,
+    },
+    {
       id: "fichas",
       label: "Fichas & Jogadores",
       icon: Users,
-      badge: `${fichasCronica.length}/${todasFichas.length}`,
+      badge: todasFichas.length,
     },
     {
       id: "grupos",
       label: "Grupos",
       icon: Layers,
       badge: subgrupos.length,
+    },
+    {
+      id: "ameacas",
+      label: "Ameaças & PdMs",
+      icon: Skull,
+      badge: escudo.ameacas.length || undefined,
     },
     {
       id: "rolagens",
@@ -755,6 +835,29 @@ export function EscudoMestre({
           );
         })}
       </nav>
+
+      {/* ABA 0: RAIO-X DA CÉLULA */}
+      {abaAtiva === "raiox" && (
+        <AbaRaioXCelula
+          fichasCronica={fichasCronica}
+          subgrupos={subgrupos}
+          carregando={carregando}
+          onAtualizar={() => carregarTudo(false)}
+          onEditarFichaAdmin={onEditarFichaAdmin}
+          onIrParaFichas={() => setAbaAtiva("fichas")}
+        />
+      )}
+
+      {/* ABA AMEAÇAS & PDMS */}
+      {abaAtiva === "ameacas" && (
+        <AbaAmeacasPdms
+          ameacas={escudo.ameacas}
+          onSalvarAmeacas={salvarListaAmeacas}
+          onEnviarParaIniciativa={enviarAmeacaParaIniciativa}
+          onRolagemRegistrada={() => carregarTudo(true)}
+          onNotify={onNotify}
+        />
+      )}
 
       {/* ABA 1: FICHAS & JOGADORES */}
       {abaAtiva === "fichas" && (
@@ -1590,20 +1693,30 @@ export function EscudoMestre({
                 sessão.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={salvarAnotacoes}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 font-semibold text-xs uppercase tracking-wider transition cursor-pointer"
-            >
-              <Save className="w-4 h-4" />
-              Salvar anotações
-            </button>
+            <div className="flex items-center gap-3">
+              {statusNotas !== "idle" && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-zinc-400">
+                  <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                  {statusNotas === "pendente"
+                    ? "Auto-save..."
+                    : "Salvo automaticamente"}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={salvarAnotacoes}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 font-semibold text-xs uppercase tracking-wider transition cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                Salvar anotações
+              </button>
+            </div>
           </div>
 
           <textarea
             rows={16}
             value={escudo.notas}
-            onChange={(e) => setEscudo({ ...escudo, notas: e.target.value })}
+            onChange={(e) => alterarAnotacoesComAutoSave(e.target.value)}
             placeholder="Notas privadas da sessão, pistas, monstros, consequências..."
             className={`${inputCls} min-h-[360px] leading-relaxed`}
           />

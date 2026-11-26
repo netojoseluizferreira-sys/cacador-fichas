@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  AmeacaCronica,
   FichaDados,
   ItemIniciativa,
   RegistroRolagemFicha,
@@ -65,6 +66,10 @@ export const escudoMestre = pgTable("escudo_mestre", {
     .notNull()
     .default("invisivel"),
   iniciativaDefinida: boolean("iniciativa_definida").notNull().default(false),
+  ameacas: jsonb("ameacas")
+    .$type<AmeacaCronica[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

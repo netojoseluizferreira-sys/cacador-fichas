@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Flame, Lock, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { textoTipoRolagem } from "@/lib/regras";
 import type {
   RegistroRolagemFicha,
@@ -67,6 +67,8 @@ interface HistoricoCentralizadoProps {
   onResolverImpeto?: (rolagemId: string, passou: boolean) => void;
   onMarcarAflicao?: (rolagemId: string) => void;
   onAumentarPerigo?: (rolagem: RegistroRolagemFicha) => void;
+  onRerolarComVontade?: (rolagemId: string, indices: number[]) => void;
+  onForcarComDesespero?: (rolagemId: string) => void;
 }
 
 function formatarData(valor?: string): string {
@@ -94,8 +96,13 @@ export function HistoricoCentralizado({
   onResolverImpeto,
   onMarcarAflicao,
   onAumentarPerigo,
+  onRerolarComVontade,
+  onForcarComDesespero,
 }: HistoricoCentralizadoProps) {
   const [filtro, setFiltro] = useState<string>("todas");
+  const [rerolandoId, setRerolandoId] = useState<string | null>(null);
+  const [indicesSelecionados, setIndicesSelecionados] = useState<number[]>([]);
+
   const emailLower = userEmail.trim().toLowerCase();
 
   const idsLocaisFicha = useMemo(
@@ -103,10 +110,44 @@ export function HistoricoCentralizado({
     [rolagensLocaisFicha]
   );
 
+  const abrirSeletorReroll = (r: RegistroRolagemFicha) => {
+    if (rerolandoId === r.id) {
+      setRerolandoId(null);
+      setIndicesSelecionados([]);
+      return;
+    }
+    // Pré-seleciona automaticamente até 3 dados que falharam (< 6) para agilizar!
+    const falhas = r.dados
+      .map((val, idx) => ({ val, idx }))
+      .filter(({ val }) => val < 6)
+      .slice(0, 3)
+      .map(({ idx }) => idx);
+    setRerolandoId(r.id);
+    setIndicesSelecionados(falhas);
+  };
+
+  const alternarIndiceReroll = (idx: number) => {
+    setIndicesSelecionados((prev) => {
+      if (prev.includes(idx)) {
+        return prev.filter((i) => i !== idx);
+      }
+      if (prev.length >= 3) {
+        return prev;
+      }
+      return [...prev, idx];
+    });
+  };
+
+  const confirmarReroll = (rolagemId: string) => {
+    if (!onRerolarComVontade || indicesSelecionados.length === 0) return;
+    onRerolarComVontade(rolagemId, indicesSelecionados);
+    setRerolandoId(null);
+    setIndicesSelecionados([]);
+  };
+
   const itensUnificados = useMemo(() => {
     const mapa = new Map<string, ItemUnificado>();
 
-    // 1. Rolagens públicas do Mestre
     for (const m of publicasMestre) {
       const chave = `mestre-pub-${m.id}`;
       mapa.set(chave, {
@@ -118,7 +159,6 @@ export function HistoricoCentralizado({
       });
     }
 
-    // 2. Rolagens privadas do Mestre (apenas no estilo Mestre)
     if (estilo === "mestre") {
       for (const m of privadasMestre) {
         const chave = `mestre-priv-${m.id}`;
@@ -132,7 +172,6 @@ export function HistoricoCentralizado({
       }
     }
 
-    // 3. Rolagens dos jogadores vindas do banco
     const chavesJogadoresVistas = new Set<string>();
     for (const j of jogadores) {
       const idDedup = `${j.fichaId || "sem-ficha"}:${j.rolagemId || j.id}`;
@@ -143,7 +182,6 @@ export function HistoricoCentralizado({
         Boolean(fichaAtualId && j.fichaId === fichaAtualId) ||
         Boolean(emailLower && j.ownerEmail?.trim().toLowerCase() === emailLower);
 
-      // Se for da ficha aberta localmente, prefere o estado local mais recente (para botões de Ímpeto)
       const localCorrespondente =
         fichaAtualId && j.fichaId === fichaAtualId
           ? rolagensLocaisFicha.find((r) => r.id === j.rolagemId)
@@ -158,12 +196,15 @@ export function HistoricoCentralizado({
         jogador: j.jogador || "",
         subgrupoNome: j.subgrupoNome || "",
         fichaId: j.fichaId,
-        descricao: j.descricao || j.resultado?.descricao || "Rolagem",
+        descricao:
+          localCorrespondente?.descricao ||
+          j.descricao ||
+          j.resultado?.descricao ||
+          "Rolagem",
         jogadorResultado: localCorrespondente ?? j.resultado,
       });
     }
 
-    // 4. Rolagens locais da ficha atual que ainda não sincronizaram
     for (const local of rolagensLocaisFicha) {
       const idDedup = `${fichaAtualId || "local"}:${local.id}`;
       const tambemSemFicha = `sem-ficha:${local.id}`;
@@ -301,7 +342,7 @@ export function HistoricoCentralizado({
       </div>
 
       {/* Lista Unificada */}
-      <div className="max-h-[520px] overflow-y-auto space-y-2.5 pr-1">
+      <div className="max-h-[560px] overflow-y-auto space-y-2.5 pr-1">
         {itensFiltrados.length === 0 ? (
           <div className="py-10 text-center border border-dashed border-zinc-800 rounded-lg">
             <p className="text-xs text-zinc-500">
@@ -310,7 +351,6 @@ export function HistoricoCentralizado({
           </div>
         ) : (
           itensFiltrados.slice(0, 120).map((item) => {
-            // Card de rolagem do Mestre (Pública ou Privada)
             if (
               item.categoria === "mestre_publica" ||
               item.categoria === "mestre_privada"
@@ -384,7 +424,6 @@ export function HistoricoCentralizado({
               );
             }
 
-            // Card de rolagem de Jogador (Minha ou de Outro Jogador)
             const r = item.jogadorResultado!;
             const dados = Array.isArray(r.dados) ? r.dados : [];
             const dadosDesespero = Array.isArray(r.dadosDesespero)
@@ -392,10 +431,26 @@ export function HistoricoCentralizado({
               : [];
             const qtdOnes = Number(r.desesperoOnes || 0);
             const ehMinha = item.categoria === "minha";
+            const pertenceAFichaAberta = ehMinha && idsLocaisFicha.has(r.id);
+
             const podeInteragirImpeto =
-              ehMinha &&
-              idsLocaisFicha.has(r.id) &&
+              pertenceAFichaAberta &&
               Boolean(onResolverImpeto && onMarcarAflicao && onAumentarPerigo);
+
+            const podeRerolarVontade =
+              pertenceAFichaAberta &&
+              Boolean(onRerolarComVontade) &&
+              !r.reroladoVontade &&
+              !r.aflicao &&
+              dados.length > 0;
+
+            const podeForcarDesespero =
+              pertenceAFichaAberta &&
+              Boolean(onForcarComDesespero) &&
+              !r.impeto &&
+              !r.aflicao;
+
+            const estaSelecionandoReroll = rerolandoId === r.id;
 
             const statusImpetoResumo = r.impeto
               ? r.aflicao
@@ -410,7 +465,7 @@ export function HistoricoCentralizado({
             return (
               <div
                 key={item.chave}
-                className={`p-3.5 rounded-lg bg-zinc-950 border space-y-1.5 text-xs ${
+                className={`p-3.5 rounded-lg bg-zinc-950 border space-y-2 text-xs ${
                   ehMinha ? "border-[#f08b21]/45" : "border-zinc-800/90"
                 }`}
               >
@@ -430,6 +485,11 @@ export function HistoricoCentralizado({
                     <strong className="text-sm text-zinc-100">
                       {item.personagem} · {textoTipoRolagem(r.tipo)}
                     </strong>
+                    {r.reroladoVontade && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-950/70 text-sky-300 border border-sky-800/60">
+                        Re-rolado (Vontade)
+                      </span>
+                    )}
                     {item.subgrupoNome && (
                       <span className="text-[11px] text-zinc-500">
                         [{item.subgrupoNome}]
@@ -453,27 +513,95 @@ export function HistoricoCentralizado({
                   {item.descricao} · {r.totalDados || dados.length} dado(s)
                 </p>
 
-                <p className="text-zinc-400">
-                  Dados:{" "}
-                  {dados.length
-                    ? dados.map((d, idx) => (
+                {/* Exibição de Dados Normais (ou seletor interativo no modo Re-rolagem) */}
+                {!estaSelecionandoReroll ? (
+                  <div className="space-y-1">
+                    <p className="text-zinc-400">
+                      Dados:{" "}
+                      {dados.length
+                        ? dados.map((d, idx) => (
+                            <span
+                              key={idx}
+                              className={`inline-block font-mono font-bold mr-1.5 ${
+                                d === 10
+                                  ? "text-[#f08b21]"
+                                  : d >= 6
+                                    ? "text-emerald-300"
+                                    : "text-zinc-400"
+                              }`}
+                            >
+                              [{d}]
+                            </span>
+                          ))
+                        : "nenhum"}
+                    </p>
+                    {Array.isArray(r.dadosAnteriores) &&
+                      r.dadosAnteriores.length > 0 && (
+                        <p className="text-[11px] text-zinc-500">
+                          Antes da re-rolagem:{" "}
+                          {r.dadosAnteriores.map((d) => `[${d}]`).join(" ")}
+                        </p>
+                      )}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-zinc-900/80 border border-sky-800/60 space-y-2.5">
+                    <p className="text-sky-200 font-medium">
+                      Clique em até <strong>3 dados normais</strong> para
+                      re-rolar (custo: 1 de Força de Vontade superficial):
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {dados.map((d, idx) => {
+                        const marcado = indicesSelecionados.includes(idx);
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => alternarIndiceReroll(idx)}
+                            className={`px-2.5 py-1.5 rounded-md font-mono text-sm font-bold border transition cursor-pointer ${
+                              marcado
+                                ? "bg-[#f08b21] text-zinc-950 border-[#f08b21] shadow-[0_0_8px_rgba(240,139,33,0.4)]"
+                                : "bg-zinc-950 text-zinc-300 border-zinc-700 hover:border-zinc-500"
+                            }`}
+                          >
+                            [{d}]
+                          </button>
+                        );
+                      })}
+                      {dadosDesespero.map((d, idx) => (
                         <span
-                          key={idx}
-                          className={`inline-block font-mono font-bold mr-1.5 ${
-                            d === 10
-                              ? "text-[#f08b21]"
-                              : d >= 6
-                                ? "text-emerald-300"
-                                : "text-zinc-400"
-                          }`}
+                          key={`desp-lock-${idx}`}
+                          title="Dados de Desespero não podem ser re-rolados com Força de Vontade"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md font-mono text-sm font-bold bg-amber-950/30 text-amber-500/70 border border-amber-800/40 cursor-not-allowed"
                         >
-                          [{d}]
+                          <Lock className="w-3 h-3" />[{d}]
                         </span>
-                      ))
-                    : "nenhum"}
-                </p>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={indicesSelecionados.length === 0}
+                        onClick={() => confirmarReroll(r.id)}
+                        className="px-3 py-1.5 rounded-md bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 font-semibold disabled:opacity-40 cursor-pointer"
+                      >
+                        Confirmar re-rolagem ({indicesSelecionados.length}/3
+                        dados · -1 Vontade)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRerolandoId(null);
+                          setIndicesSelecionados([]);
+                        }}
+                        className="px-3 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                {r.impeto && (
+                {r.impeto && !estaSelecionandoReroll && (
                   <p className="text-amber-300/90">
                     Dados de Desespero:{" "}
                     {dadosDesespero.length
@@ -511,7 +639,35 @@ export function HistoricoCentralizado({
                   {!podeInteragirImpeto && statusImpetoResumo}
                 </p>
 
-                {/* Botões interativos de resolução de 1 em Dado de Desespero para a própria ficha */}
+                {/* Botões de Re-rolagem (Vontade) e Forçar com Dados de Desespero */}
+                {(podeRerolarVontade || podeForcarDesespero) &&
+                  !estaSelecionandoReroll && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-zinc-800/70">
+                      {podeRerolarVontade && (
+                        <button
+                          type="button"
+                          onClick={() => abrirSeletorReroll(r)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-sky-300 border border-sky-800/50 font-medium transition cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Re-rolar até 3 dados (1 Vontade)
+                        </button>
+                      )}
+
+                      {podeForcarDesespero && (
+                        <button
+                          type="button"
+                          onClick={() => onForcarComDesespero?.(r.id)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-700/50 font-medium transition cursor-pointer"
+                        >
+                          <Flame className="w-3 h-3" />
+                          Rolar / Forçar com Dados de Desespero
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                {/* Resolução interativa de 1 em Dado de Desespero */}
                 {podeInteragirImpeto && r.impeto && qtdOnes > 0 && (
                   <div className="mt-2 pt-2 border-t border-zinc-800 space-y-2">
                     {r.aflicao ? (

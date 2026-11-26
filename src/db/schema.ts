@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -60,6 +61,10 @@ export const escudoMestre = pgTable("escudo_mestre", {
     .notNull()
     .default(sql`'[]'::jsonb`),
   turno: integer("turno").notNull().default(0),
+  iniciativaVisibilidade: text("iniciativa_visibilidade")
+    .notNull()
+    .default("invisivel"),
+  iniciativaDefinida: boolean("iniciativa_definida").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

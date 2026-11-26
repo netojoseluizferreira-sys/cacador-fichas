@@ -11,14 +11,17 @@ import {
   rolagensPublicas,
 } from "@/db/schema";
 import { obterEmailAdmin, obterUsuarioSessao } from "@/lib/auth";
+import type { VisibilidadeIniciativa } from "@/types/ficha";
 
 const ItemIniciativaSchema = z.object({
   id: z.string(),
   nome: z.string(),
   detalhe: z.string().optional(),
   fichaId: z.string().optional(),
+  ownerEmail: z.string().optional(),
   tipo: z.string().optional(),
   valor: z.number(),
+  visivel: z.boolean().optional(),
 });
 
 const SalvarEscudoSchema = z.object({
@@ -26,7 +29,18 @@ const SalvarEscudoSchema = z.object({
   notas: z.string().default(""),
   iniciativa: z.array(ItemIniciativaSchema).default([]),
   turno: z.number().int().min(0).default(0),
+  iniciativa_visibilidade: z
+    .enum(["total", "parcial", "invisivel"])
+    .default("invisivel"),
+  iniciativa_definida: z.boolean().default(false),
 });
+
+function normalizarVisibilidade(val?: string | null): VisibilidadeIniciativa {
+  if (val === "total" || val === "parcial" || val === "invisivel") {
+    return val;
+  }
+  return "invisivel";
+}
 
 export async function GET() {
   try {
@@ -36,7 +50,10 @@ export async function GET() {
     }
     if (!user.isAdmin) {
       return NextResponse.json(
-        { error: "Apenas a conta administradora pode acessar o Escudo do Mestre." },
+        {
+          error:
+            "Apenas a conta administradora pode acessar o Escudo do Mestre.",
+        },
         { status: 403 }
       );
     }
@@ -58,6 +75,8 @@ export async function GET() {
           notas: "",
           iniciativa: [],
           turno: 0,
+          iniciativaVisibilidade: "invisivel",
+          iniciativaDefinida: false,
         })
         .returning();
     }
@@ -95,12 +114,12 @@ export async function GET() {
         .select()
         .from(rolagensPublicas)
         .orderBy(desc(rolagensPublicas.createdAt))
-        .limit(15),
+        .limit(60),
       db
         .select()
         .from(rolagensPrivadas)
         .orderBy(desc(rolagensPrivadas.createdAt))
-        .limit(15),
+        .limit(60),
       db
         .select()
         .from(rolagensJogadoresPublicas)
@@ -114,6 +133,10 @@ export async function GET() {
         notas: escudo.notas ?? "",
         iniciativa: escudo.iniciativa ?? [],
         turno: escudo.turno ?? 0,
+        iniciativa_visibilidade: normalizarVisibilidade(
+          escudo.iniciativaVisibilidade
+        ),
+        iniciativa_definida: Boolean(escudo.iniciativaDefinida),
       },
       fichas: todasFichas,
       subgrupos,
@@ -149,7 +172,10 @@ export async function PUT(request: Request) {
     const parsed = SalvarEscudoSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || "Dados do escudo inválidos." },
+        {
+          error:
+            parsed.error.issues[0]?.message || "Dados do escudo inválidos.",
+        },
         { status: 400 }
       );
     }
@@ -164,6 +190,8 @@ export async function PUT(request: Request) {
         notas: parsed.data.notas,
         iniciativa: parsed.data.iniciativa,
         turno: parsed.data.turno,
+        iniciativaVisibilidade: parsed.data.iniciativa_visibilidade,
+        iniciativaDefinida: parsed.data.iniciativa_definida,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -174,6 +202,8 @@ export async function PUT(request: Request) {
           notas: parsed.data.notas,
           iniciativa: parsed.data.iniciativa,
           turno: parsed.data.turno,
+          iniciativaVisibilidade: parsed.data.iniciativa_visibilidade,
+          iniciativaDefinida: parsed.data.iniciativa_definida,
           updatedAt: new Date(),
         },
       })
@@ -185,6 +215,10 @@ export async function PUT(request: Request) {
         notas: atualizado.notas ?? "",
         iniciativa: atualizado.iniciativa ?? [],
         turno: atualizado.turno ?? 0,
+        iniciativa_visibilidade: normalizarVisibilidade(
+          atualizado.iniciativaVisibilidade
+        ),
+        iniciativa_definida: Boolean(atualizado.iniciativaDefinida),
       },
     });
   } catch (erro) {

@@ -38,35 +38,39 @@ const CriarRolagemBodySchema = z.discriminatedUnion("origem", [
   RolagemJogadorSchema,
 ]);
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const user = await obterUsuarioSessao();
     if (!user) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const subgrupoId = searchParams.get("subgrupoId");
     const db = getDb();
 
-    const publicasMestre = await db
-      .select()
-      .from(rolagensPublicas)
-      .orderBy(desc(rolagensPublicas.createdAt))
-      .limit(30);
-
-    const publicasJogadores =
-      subgrupoId && z.uuid().safeParse(subgrupoId).success
-        ? await db
-            .select()
-            .from(rolagensJogadoresPublicas)
-            .where(eq(rolagensJogadoresPublicas.subgrupoId, subgrupoId))
-            .orderBy(desc(rolagensJogadoresPublicas.createdAt))
-            .limit(60)
-        : [];
+    const [publicasMestre, privadasMestre, publicasJogadores] =
+      await Promise.all([
+        db
+          .select()
+          .from(rolagensPublicas)
+          .orderBy(desc(rolagensPublicas.createdAt))
+          .limit(60),
+        user.isAdmin
+          ? db
+              .select()
+              .from(rolagensPrivadas)
+              .orderBy(desc(rolagensPrivadas.createdAt))
+              .limit(60)
+          : Promise.resolve([]),
+        db
+          .select()
+          .from(rolagensJogadoresPublicas)
+          .orderBy(desc(rolagensJogadoresPublicas.createdAt))
+          .limit(120),
+      ]);
 
     return NextResponse.json({
       publicasMestre,
+      privadasMestre,
       publicasJogadores,
     });
   } catch (erro) {
@@ -89,7 +93,10 @@ export async function POST(request: Request) {
     const parsed = CriarRolagemBodySchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || "Dados de rolagem inválidos." },
+        {
+          error:
+            parsed.error.issues[0]?.message || "Dados de rolagem inválidos.",
+        },
         { status: 400 }
       );
     }
@@ -227,7 +234,10 @@ export async function DELETE() {
     }
     if (!user.isAdmin) {
       return NextResponse.json(
-        { error: "Apenas o mestre admin pode limpar o histórico de rolagens." },
+        {
+          error:
+            "Apenas o mestre admin pode limpar o histórico de rolagens.",
+        },
         { status: 403 }
       );
     }

@@ -24,6 +24,7 @@ import { AbaDanos } from "@/components/abas/AbaDanos";
 import { AbaExtras } from "@/components/abas/AbaExtras";
 import { AbaHabilidades } from "@/components/abas/AbaHabilidades";
 import { AbaIdentidade } from "@/components/abas/AbaIdentidade";
+import { AbaIniciativa } from "@/components/abas/AbaIniciativa";
 import { AbaPrevia } from "@/components/abas/AbaPrevia";
 import { AbaRolagem } from "@/components/abas/AbaRolagem";
 import { AbaTrunfos } from "@/components/abas/AbaTrunfos";
@@ -60,6 +61,7 @@ type EtapaId =
   | "extras"
   | "dano"
   | "rolagem"
+  | "iniciativa"
   | "xp"
   | "preview";
 
@@ -72,6 +74,7 @@ const ABAS_LABELS: Record<EtapaId, string> = {
   extras: "Extras",
   dano: "Danos",
   rolagem: "Rolagem",
+  iniciativa: "Iniciativa",
   xp: "XP",
   preview: "Prévia",
 };
@@ -90,6 +93,7 @@ const ETAPAS_GERENCIAR: EtapaId[] = [
   "preview",
   "dano",
   "rolagem",
+  "iniciativa",
   "xp",
   "extras",
 ];
@@ -103,6 +107,7 @@ const ETAPAS_ADMIN_EDIT: EtapaId[] = [
   "extras",
   "dano",
   "rolagem",
+  "iniciativa",
   "xp",
   "preview",
 ];
@@ -282,16 +287,37 @@ export function CacadorApp() {
       setFicha(sincronizada);
       salvarLocal(sincronizada);
 
-      if (user && fichaAtualId && modoTela !== "admin") {
-        await salvarOnlineSilencioso(sincronizada);
-        if (rolagemPublicar) {
+      if (user && modoTela !== "admin") {
+        let idParaRolagem = fichaAtualId;
+        if (!idParaRolagem) {
+          try {
+            const resCriar = await fetch("/api/fichas", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ dados: sincronizada }),
+            });
+            if (resCriar.ok) {
+              const jsonCriar = await resCriar.json();
+              idParaRolagem = jsonCriar.ficha?.id ?? null;
+              if (idParaRolagem) {
+                setFichaAtualId(idParaRolagem);
+              }
+            }
+          } catch {
+            // Silencioso
+          }
+        } else {
+          await salvarOnlineSilencioso(sincronizada);
+        }
+
+        if (rolagemPublicar && idParaRolagem) {
           try {
             await fetch("/api/rolagens", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 origem: "jogador",
-                fichaId: fichaAtualId,
+                fichaId: idParaRolagem,
                 rolagemId: String(rolagemPublicar.id),
                 subgrupoId: rolagemPublicar.subgrupoId || null,
                 subgrupoNome: rolagemPublicar.subgrupoNome || "",
@@ -819,6 +845,7 @@ export function CacadorApp() {
       ) : modoTela === "admin" ? (
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
           <EscudoMestre
+            userEmail={user?.email || ""}
             onEditarFichaAdmin={(id) =>
               carregarFichaPorId(id, { adminEdit: true })
             }
@@ -970,12 +997,17 @@ export function CacadorApp() {
             <AbaRolagem
               ficha={ficha}
               fichaAtualId={fichaAtualId}
+              userEmail={user?.email || ""}
+              isAdmin={Boolean(user?.isAdmin)}
               subgrupo={subgrupoCronica}
               autenticado={Boolean(user)}
               onAtualizarFichaERolagem={atualizarFichaERolagem}
               onRecarregarSubgrupo={() => recarregarSubgrupoDaFicha()}
               onNotify={notificar}
             />
+          )}
+          {etapaAtiva === "iniciativa" && (
+            <AbaIniciativa autenticado={Boolean(user)} />
           )}
           {etapaAtiva === "xp" && (
             <AbaXp

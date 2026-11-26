@@ -232,13 +232,17 @@ export interface FichaDados {
   rolagens: RegistroRolagemFicha[];
 }
 
+export type VisibilidadeIniciativa = "total" | "parcial" | "invisivel";
+
 export interface ItemIniciativa {
   id: string;
   nome: string;
   detalhe?: string;
   fichaId?: string;
+  ownerEmail?: string;
   tipo?: "jogador" | "outro" | string;
   valor: number;
+  visivel?: boolean;
 }
 
 export interface SubgrupoCronica {
@@ -255,6 +259,8 @@ export interface EscudoMestreEstado {
   notas: string;
   iniciativa: ItemIniciativa[];
   turno: number;
+  iniciativa_visibilidade: VisibilidadeIniciativa;
+  iniciativa_definida: boolean;
 }
 
 export interface FichaResumoOnline {

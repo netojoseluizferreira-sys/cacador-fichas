@@ -8,18 +8,34 @@ Desktop.ini
 *.swp
 *.swo
 
-# Dependencias e builds eventuais
+# Dependências e builds
 node_modules/
+.next/
+out/
 dist/
 build/
+drizzle/
+next-env.d.ts
+*.tsbuildinfo
 
-# Logs
+# Variáveis de ambiente e segredos locais
+.env
+.env.*
+!.env.example
+
+# Backups de banco de dados (contêm e-mails e dados privados da mesa)
+backup*.json
+*.sql
+*.dump
+
+# Vercel
+.vercel
+
+# Logs e temporários
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Temporarios
 tmp/
 temp/
 .cache/

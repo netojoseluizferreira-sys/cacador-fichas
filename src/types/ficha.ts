@@ -297,6 +297,56 @@ export interface EscudoMestreEstado {
   ameacas: AmeacaCronica[];
 }
 
+export type TemaFundoMapa =
+  | "asfalto"
+  | "galpao"
+  | "hospital"
+  | "subterraneo"
+  | "floresta";
+
+export interface TokenMapa {
+  id: string;
+  nome: string;
+  cor: string;
+  sigla: string;
+  x: number;
+  y: number;
+  tamanho: 1 | 2 | 3;
+  tipo: "jogador" | "ameaca" | "marcador";
+  fichaId?: string;
+  ownerEmail?: string;
+  ameacaId?: string;
+  oculto?: boolean;
+}
+
+export interface MapaTaticoEstado {
+  visivelJogadores: boolean;
+  movimentoJogadoresLiberado: boolean;
+  titulo: string;
+  imagemUrl: string;
+  temaFundo: TemaFundoMapa;
+  colunas: number;
+  linhas: number;
+  opacidadeGrid: number;
+  corGrid: string;
+  fogCelulas: string[];
+  tokens: TokenMapa[];
+  updatedAt?: string;
+}
+
+export interface UltimaRolagemResumo {
+  id: string;
+  autor: string;
+  etiqueta: string;
+  descricao: string;
+  dados: number[];
+  dadosDesespero?: number[];
+  sucessos: number;
+  critico: boolean;
+  aflicao?: boolean;
+  data: string;
+}
+
 export interface FichaResumoOnline {
   id: string;
   nome: string;

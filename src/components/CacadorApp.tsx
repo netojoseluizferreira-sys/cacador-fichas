@@ -76,7 +76,7 @@ const ABAS_LABELS: Record<EtapaId, string> = {
   trunfos: "Trunfos",
   extras: "Extras",
   dano: "Danos",
-  rolagem: "Rolagem",
+  rolagem: "Rolagens e Grid",
   iniciativa: "Iniciativa",
   xp: "XP",
   preview: "Prévia",

@@ -32,11 +32,16 @@ import {
 import { AbaAdminContas } from "@/components/AbaAdminContas";
 import { AbaAmeacasPdms } from "@/components/AbaAmeacasPdms";
 import { AbaRaioXCelula } from "@/components/AbaRaioXCelula";
+import { GridTaticoCombate } from "@/components/GridTaticoCombate";
 import {
   HistoricoCentralizado,
   type RolagemJogadorFeedItem,
   type RolagemMestreFeedItem,
 } from "@/components/HistoricoCentralizado";
+import {
+  ModalSimulacaoRolagem,
+  type EventoAnimacaoRolagem,
+} from "@/components/SimulacaoDadosTela";
 import type {
   AmeacaCronica,
   EscudoMestreEstado,
@@ -130,6 +135,8 @@ export function EscudoMestre({
   const [mestreVisibilidade, setMestreVisibilidade] = useState<
     "publica" | "privada"
   >("publica");
+  const [eventoAnimacaoMestre, setEventoAnimacaoMestre] =
+    useState<EventoAnimacaoRolagem | null>(null);
 
   // Iniciativa - inserção
   const [iniFichaId, setIniFichaId] = useState("");
@@ -348,6 +355,19 @@ export function EscudoMestre({
     if (!res.ok) {
       onNotify(data.error || "Erro ao realizar rolagem do mestre.", "erro");
       return;
+    }
+    if (data.rolagem?.resultado) {
+      setEventoAnimacaoMestre({
+        id: data.rolagem.id,
+        titulo:
+          mestreVisibilidade === "privada"
+            ? "Rolagem Privada do Mestre"
+            : "Rolagem Pública do Mestre",
+        subtitulo: data.rolagem.descricao,
+        dados: data.rolagem.resultado.dados ?? [],
+        sucessos: Number(data.rolagem.resultado.sucessos ?? 0),
+        critico: Boolean(data.rolagem.resultado.critico),
+      });
     }
     setMestreDesc("");
     await carregarTudo(true);
@@ -743,7 +763,7 @@ export function EscudoMestre({
     },
     {
       id: "rolagens",
-      label: "Rolagens & Histórico",
+      label: "Rolagens e Grid",
       icon: Dices,
     },
     {
@@ -1263,6 +1283,18 @@ export function EscudoMestre({
               onLimparTudo={limparTodoHistoricoRolagens}
             />
           </div>
+
+          {/* Grid Tático Completo do Mestre no final da aba Rolagens e Grid */}
+          <div className="bg-[#141416] border border-zinc-800/90 rounded-xl p-2 sm:p-3">
+            <GridTaticoCombate
+              modo="mestre"
+              autenticado={true}
+              userEmail={userEmail}
+              fichasCronicaMestre={fichasCronica}
+              ameacasMestre={escudo.ameacas}
+              onNotify={onNotify}
+            />
+          </div>
         </div>
       )}
 
@@ -1725,6 +1757,11 @@ export function EscudoMestre({
 
       {/* ABA 6: ADMIN (CONTAS E CREDENCIAIS) */}
       {abaAtiva === "admin" && <AbaAdminContas onNotify={onNotify} />}
+
+      <ModalSimulacaoRolagem
+        evento={eventoAnimacaoMestre}
+        onFechar={() => setEventoAnimacaoMestre(null)}
+      />
     </section>
   );
 }

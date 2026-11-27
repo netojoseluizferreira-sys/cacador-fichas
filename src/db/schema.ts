@@ -14,6 +14,7 @@ import type {
   AmeacaCronica,
   FichaDados,
   ItemIniciativa,
+  MapaTaticoEstado,
   RegistroRolagemFicha,
   ResultadoRolagemMestre,
 } from "@/types/ficha";
@@ -70,6 +71,10 @@ export const escudoMestre = pgTable("escudo_mestre", {
     .$type<AmeacaCronica[]>()
     .notNull()
     .default(sql`'[]'::jsonb`),
+  mapaTatico: jsonb("mapa_tatico")
+    .$type<MapaTaticoEstado>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -2,11 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Award, Dices, Flame } from "lucide-react";
+import { GridTaticoCombate } from "@/components/GridTaticoCombate";
 import {
   HistoricoCentralizado,
   type RolagemJogadorFeedItem,
   type RolagemMestreFeedItem,
 } from "@/components/HistoricoCentralizado";
+import {
+  ModalSimulacaoRolagem,
+  type EventoAnimacaoRolagem,
+} from "@/components/SimulacaoDadosTela";
 import {
   adicionarDadosDesesperoNaRolagem,
   calcularParadaRolagem,
@@ -61,6 +66,9 @@ export function AbaRolagem({
   const [usarEspecializacao, setUsarEspecializacao] = useState(false);
   const [nomeEspecializacao, setNomeEspecializacao] = useState("");
   const [usarImpeto, setUsarImpeto] = useState(false);
+  const [animarDados, setAnimarDados] = useState(true);
+  const [eventoAnimacao, setEventoAnimacao] =
+    useState<EventoAnimacaoRolagem | null>(null);
   const [resolvendoPerigoId, setResolvendoPerigoId] = useState<string | null>(
     null
   );
@@ -179,6 +187,19 @@ export function AbaRolagem({
       return;
     }
 
+    if (animarDados) {
+      setEventoAnimacao({
+        id: res.rolagem.id,
+        titulo: ficha.identidade.nome.trim() || "Rolagem de Dados",
+        subtitulo: res.rolagem.descricao,
+        dados: res.rolagem.dados,
+        dadosDesespero: res.rolagem.dadosDesespero,
+        sucessos: res.rolagem.sucessos,
+        critico: res.rolagem.critico,
+        desesperoOnes: res.rolagem.desesperoOnes,
+      });
+    }
+
     await onAtualizarFichaERolagem(res.ficha, res.rolagem);
     await carregarFeedCentralizado(true);
   };
@@ -191,6 +212,18 @@ export function AbaRolagem({
     if (!res.ok) {
       onNotify(res.erro, "erro");
       return;
+    }
+    if (animarDados) {
+      setEventoAnimacao({
+        id: `${res.rolagemAtualizada.id}-reroll`,
+        titulo: "Re-rolagem de Força de Vontade",
+        subtitulo: res.rolagemAtualizada.descricao,
+        dados: res.rolagemAtualizada.dados,
+        dadosDesespero: res.rolagemAtualizada.dadosDesespero,
+        sucessos: res.rolagemAtualizada.sucessos,
+        critico: res.rolagemAtualizada.critico,
+        desesperoOnes: res.rolagemAtualizada.desesperoOnes,
+      });
     }
     await onAtualizarFichaERolagem(res.ficha, res.rolagemAtualizada);
     await carregarFeedCentralizado(true);
@@ -209,6 +242,18 @@ export function AbaRolagem({
     if (!res.ok) {
       onNotify(res.erro, "erro");
       return;
+    }
+    if (animarDados) {
+      setEventoAnimacao({
+        id: `${res.rolagemAtualizada.id}-desp`,
+        titulo: "Dados de Desespero (+Ímpeto)",
+        subtitulo: res.rolagemAtualizada.descricao,
+        dados: res.rolagemAtualizada.dados,
+        dadosDesespero: res.rolagemAtualizada.dadosDesespero,
+        sucessos: res.rolagemAtualizada.sucessos,
+        critico: res.rolagemAtualizada.critico,
+        desesperoOnes: res.rolagemAtualizada.desesperoOnes,
+      });
     }
     await onAtualizarFichaERolagem(res.ficha, res.rolagemAtualizada);
     await carregarFeedCentralizado(true);
@@ -476,15 +521,27 @@ export function AbaRolagem({
             <span className="text-zinc-400"> — {parada.descricao}</span>
           </div>
 
-          <label className="inline-flex items-center gap-2 text-sm font-medium text-amber-300 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={usarImpeto}
-              onChange={(e) => setUsarImpeto(e.target.checked)}
-              className="rounded border-zinc-700 bg-zinc-900 accent-[#f08b21]"
-            />
-            Usar Ímpeto
-          </label>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-amber-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={usarImpeto}
+                onChange={(e) => setUsarImpeto(e.target.checked)}
+                className="rounded border-zinc-700 bg-zinc-900 accent-[#f08b21]"
+              />
+              Usar Ímpeto
+            </label>
+
+            <label className="inline-flex items-center gap-2 text-xs text-zinc-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={animarDados}
+                onChange={(e) => setAnimarDados(e.target.checked)}
+                className="rounded border-zinc-700 bg-zinc-900 accent-[#f08b21]"
+              />
+              Simulação de dados na tela
+            </label>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -528,6 +585,21 @@ export function AbaRolagem({
         onAumentarPerigo={handleAumentarPerigo}
         onRerolarComVontade={handleRerolarComVontade}
         onForcarComDesespero={handleForcarComDesespero}
+      />
+
+      {/* Grid Tático de Combate no final da aba Rolagens e Grid */}
+      <GridTaticoCombate
+        modo="jogador"
+        autenticado={autenticado}
+        fichaAtualId={fichaAtualId}
+        nomePersonagemAtual={ficha.identidade.nome || "Caçador"}
+        userEmail={userEmail}
+        onNotify={onNotify}
+      />
+
+      <ModalSimulacaoRolagem
+        evento={eventoAnimacao}
+        onFechar={() => setEventoAnimacao(null)}
       />
     </section>
   );

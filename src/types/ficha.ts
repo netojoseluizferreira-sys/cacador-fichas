@@ -320,7 +320,14 @@ export interface TokenMapa {
   oculto?: boolean;
 }
 
+export interface MapaImagemSalva {
+  id: string;
+  nome: string;
+  imagemUrl: string;
+}
+
 export interface MapaTaticoEstado {
+  versao?: number;
   visivelJogadores: boolean;
   posicionamentoJogadoresLiberado: boolean;
   movimentoJogadoresLiberado: boolean;
@@ -328,6 +335,7 @@ export interface MapaTaticoEstado {
   jogadoresTravadosMovimento: string[];
   titulo: string;
   imagemUrl: string;
+  ajusteImagem?: "esticar" | "cobrir";
   temaFundo: TemaFundoMapa;
   colunas: number;
   linhas: number;
@@ -335,6 +343,8 @@ export interface MapaTaticoEstado {
   corGrid: string;
   fogCelulas: string[];
   tokens: TokenMapa[];
+  mapasSalvos?: MapaImagemSalva[];
+  retratosSalvos?: Record<string, string>;
   updatedAt?: string;
 }
 

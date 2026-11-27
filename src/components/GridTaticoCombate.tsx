@@ -3,17 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
+  Check,
   CloudFog,
   Eye,
   EyeOff,
+  Grid3X3,
   Hand,
   ImagePlus,
+  Loader2,
   Lock,
   MapPin,
   Maximize2,
   Minimize2,
+  Minus,
   MousePointer,
   Plus,
+  Proportions,
   RefreshCw,
   Ruler,
   Settings,
@@ -33,6 +38,7 @@ import { WidgetUltimaRolagemCanto } from "@/components/SimulacaoDadosTela";
 import {
   comprimirImagemMapa,
   comprimirImagemToken,
+  obterDimensoesImagem,
 } from "@/lib/imagem-upload";
 import type {
   AmeacaCronica,
@@ -54,6 +60,32 @@ const CORES_TOKEN = [
   "#eab308",
   "#ec4899",
   "#71717a",
+];
+
+const PRESETS_TAMANHO_GRID: Array<{
+  label: string;
+  detalhe: string;
+  colunas: number;
+  linhas: number;
+}> = [
+  { label: "Compacto", detalhe: "12×10", colunas: 12, linhas: 10 },
+  { label: "Padrão", detalhe: "20×14", colunas: 20, linhas: 14 },
+  { label: "Amplo", detalhe: "28×20", colunas: 28, linhas: 20 },
+  { label: "Enorme", detalhe: "36×26", colunas: 36, linhas: 26 },
+];
+
+const CORES_LINHA_GRID: Array<{ id: string; label: string; rgbaBase: string }> =
+  [
+    { id: "#ffffff", label: "Branca", rgbaBase: "255,255,255" },
+    { id: "#000000", label: "Escura", rgbaBase: "0,0,0" },
+    { id: "#f08b21", label: "Âmbar", rgbaBase: "240,139,33" },
+  ];
+
+const NIVEIS_OPACIDADE_GRID: Array<{ valor: number; label: string }> = [
+  { valor: 0, label: "Oculta" },
+  { valor: 0.18, label: "Suave" },
+  { valor: 0.32, label: "Média" },
+  { valor: 0.55, label: "Forte" },
 ];
 
 const TEMAS_FUNDO: Array<{
@@ -122,6 +154,7 @@ interface FichaDisponivelJogador {
   id: string;
   nome: string;
   sigla: string;
+  fotoSalva?: string;
 }
 
 interface AlvoPermissaoJogador {
@@ -161,7 +194,15 @@ function estaTravadoNaLista(
   return false;
 }
 
+function obterRgbLinhaGrid(corHex: string): string {
+  const achada = CORES_LINHA_GRID.find(
+    (c) => c.id.toLowerCase() === (corHex || "").toLowerCase()
+  );
+  return achada ? achada.rgbaBase : "255,255,255";
+}
+
 const MAPA_INICIAL: MapaTaticoEstado = {
+  versao: 1,
   visivelJogadores: false,
   posicionamentoJogadoresLiberado: true,
   movimentoJogadoresLiberado: true,
@@ -169,13 +210,16 @@ const MAPA_INICIAL: MapaTaticoEstado = {
   jogadoresTravadosMovimento: [],
   titulo: "Cena de Conflito",
   imagemUrl: "",
+  ajusteImagem: "esticar",
   temaFundo: "asfalto",
   colunas: 20,
   linhas: 14,
-  opacidadeGrid: 0.28,
+  opacidadeGrid: 0.32,
   corGrid: "#ffffff",
   fogCelulas: [],
   tokens: [],
+  mapasSalvos: [],
+  retratosSalvos: {},
 };
 
 export function GridTaticoCombate({
@@ -189,13 +233,40 @@ export function GridTaticoCombate({
   onNotify,
 }: GridTaticoCombateProps) {
   const [carregando, setCarregando] = useState(true);
+  const [salvandoContador, setSalvandoContador] = useState(0);
   const [visivelParaJogador, setVisivelParaJogador] = useState(false);
-  const [mapa, setMapa] = useState<MapaTaticoEstado>(MAPA_INICIAL);
+  const [mapa, setMapaState] = useState<MapaTaticoEstado>(MAPA_INICIAL);
   const [minhasFichas, setMinhasFichas] = useState<FichaDisponivelJogador[]>(
     []
   );
   const [ultimaRolagem, setUltimaRolagem] =
     useState<UltimaRolagemResumo | null>(null);
+
+  // Refs de sincronização anti-reversão (impedem que polling antigo desfaça ações)
+  const mapaRef = useRef<MapaTaticoEstado>(MAPA_INICIAL);
+  const mutacoesPendentesRef = useRef(0);
+  const sequenciaMutacaoRef = useRef(0);
+  const ultimoFimMutacaoRef = useRef(0);
+  const versaoConhecidaRef = useRef(0);
+  const filaMutacaoRef = useRef<Promise<unknown>>(Promise.resolve());
+  const interagindoRef = useRef(false);
+
+  const atualizarEstadoMapa = useCallback(
+    (
+      novoOuFn:
+        | MapaTaticoEstado
+        | ((atual: MapaTaticoEstado) => MapaTaticoEstado)
+    ) => {
+      setMapaState((prev) => {
+        const base = mapaRef.current || prev;
+        const proximo =
+          typeof novoOuFn === "function" ? novoOuFn(base) : novoOuFn;
+        mapaRef.current = proximo;
+        return proximo;
+      });
+    },
+    []
+  );
 
   // Controles visuais locais de câmera e painéis do Mestre
   const [zoom, setZoom] = useState(1);
@@ -204,6 +275,36 @@ export function GridTaticoCombate({
   const [configAberta, setConfigAberta] = useState(modo === "mestre");
   const [travasIndividuaisAberta, setTravasIndividuaisAberta] = useState(false);
   const [processandoUpload, setProcessandoUpload] = useState(false);
+
+  // Rascunhos locais desacoplados do polling (para digitar sem pular ou apagar sozinho!)
+  const [tituloDraft, setTituloDraft] = useState("Cena de Conflito");
+  const [urlMapaDraft, setUrlMapaDraft] = useState("");
+  const [colunasDraft, setColunasDraft] = useState("20");
+  const [linhasDraft, setLinhasDraft] = useState("14");
+  const editandoTituloRef = useRef(false);
+  const editandoTamanhoRef = useRef(false);
+
+  // Sincroniza rascunhos quando o mapa muda externamente e o usuário não está digitando neles
+  useEffect(() => {
+    if (!editandoTituloRef.current) {
+      setTituloDraft(mapa.titulo || "Cena de Conflito");
+    }
+  }, [mapa.titulo]);
+
+  useEffect(() => {
+    if (!editandoTamanhoRef.current) {
+      setColunasDraft(String(mapa.colunas));
+      setLinhasDraft(String(mapa.linhas));
+    }
+  }, [mapa.colunas, mapa.linhas]);
+
+  useEffect(() => {
+    if (mapa.imagemUrl && !mapa.imagemUrl.startsWith("data:image/")) {
+      setUrlMapaDraft(mapa.imagemUrl);
+    } else if (!mapa.imagemUrl) {
+      setUrlMapaDraft("");
+    }
+  }, [mapa.imagemUrl]);
 
   // Aparência e posicionamento do token do Jogador
   const [corMeuToken, setCorMeuToken] = useState("#f08b21");
@@ -261,7 +362,32 @@ export function GridTaticoCombate({
   const [novoTokOculto, setNovoTokOculto] = useState(false);
   const [novoTokImagem, setNovoTokImagem] = useState("");
 
-  const interagindoRef = useRef(false);
+  // Enfileira qualquer mutação (PATCH do Mestre ou POST do Jogador) em ordem estrita
+  const enfileirarMutacao = useCallback(
+    async <T,>(tarefa: () => Promise<T>): Promise<T> => {
+      sequenciaMutacaoRef.current += 1;
+      mutacoesPendentesRef.current += 1;
+      setSalvandoContador((c) => c + 1);
+
+      const execucao = filaMutacaoRef.current
+        .catch(() => undefined)
+        .then(() => tarefa());
+
+      filaMutacaoRef.current = execucao.catch(() => undefined);
+
+      try {
+        return await execucao;
+      } finally {
+        mutacoesPendentesRef.current = Math.max(
+          0,
+          mutacoesPendentesRef.current - 1
+        );
+        ultimoFimMutacaoRef.current = Date.now();
+        setSalvandoContador((c) => Math.max(0, c - 1));
+      }
+    },
+    []
+  );
 
   const carregarMapa = useCallback(
     async (silencioso = false) => {
@@ -269,20 +395,82 @@ export function GridTaticoCombate({
         setCarregando(false);
         return;
       }
-      if (silencioso && interagindoRef.current) return;
+
+      if (
+        silencioso &&
+        (interagindoRef.current ||
+          mutacoesPendentesRef.current > 0 ||
+          Date.now() - ultimoFimMutacaoRef.current < 1600)
+      ) {
+        return;
+      }
+
+      const seqAntes = sequenciaMutacaoRef.current;
       if (!silencioso) setCarregando(true);
 
       try {
-        const res = await fetch("/api/mapa", { cache: "no-store" });
+        const atual = mapaRef.current;
+        const params = new URLSearchParams();
+        if (atual.imagemUrl) {
+          params.set("imgLen", String(atual.imagemUrl.length));
+          params.set("imgTail", atual.imagemUrl.slice(-24));
+        }
+        if (silencioso && modo === "mestre") {
+          params.set("omitirGaleria", "1");
+          params.set("galeriaCount", String(atual.mapasSalvos?.length ?? 0));
+        }
+
+        const qs = params.toString();
+        const res = await fetch(`/api/mapa${qs ? `?${qs}` : ""}`, {
+          cache: "no-store",
+        });
         if (!res.ok) return;
         const json = await res.json();
+
+        // Se houve qualquer ação local enquanto o GET estava viajando, descarta o poll antigo!
+        if (
+          silencioso &&
+          (interagindoRef.current ||
+            mutacoesPendentesRef.current > 0 ||
+            sequenciaMutacaoRef.current !== seqAntes)
+        ) {
+          return;
+        }
+
         setVisivelParaJogador(Boolean(json.visivel));
         setMinhasFichas(json.minhasFichas ?? []);
         setUltimaRolagem(json.ultimaRolagem ?? null);
+
         if (json.mapa) {
-          setMapa({
+          const versaoRemota = Number(json.mapa.versao || 1);
+          if (
+            silencioso &&
+            versaoConhecidaRef.current > 0 &&
+            versaoRemota < versaoConhecidaRef.current
+          ) {
+            return;
+          }
+          versaoConhecidaRef.current = Math.max(
+            versaoConhecidaRef.current,
+            versaoRemota
+          );
+
+          atualizarEstadoMapa((prev) => ({
             ...MAPA_INICIAL,
             ...json.mapa,
+            imagemUrl: json.imagemUrlMantida
+              ? prev.imagemUrl
+              : (json.mapa.imagemUrl ?? ""),
+            mapasSalvos: json.mapasSalvosMantidos
+              ? (prev.mapasSalvos ?? [])
+              : Array.isArray(json.mapa.mapasSalvos)
+                ? json.mapa.mapasSalvos
+                : [],
+            retratosSalvos:
+              json.mapa.retratosSalvos &&
+              typeof json.mapa.retratosSalvos === "object"
+                ? json.mapa.retratosSalvos
+                : (prev.retratosSalvos ?? {}),
             jogadoresTravadosInsercao: Array.isArray(
               json.mapa.jogadoresTravadosInsercao
             )
@@ -293,7 +481,7 @@ export function GridTaticoCombate({
             )
               ? json.mapa.jogadoresTravadosMovimento
               : [],
-          });
+          }));
         }
       } catch {
         // Silencioso no polling
@@ -301,22 +489,22 @@ export function GridTaticoCombate({
         if (!silencioso) setCarregando(false);
       }
     },
-    [autenticado]
+    [autenticado, modo, atualizarEstadoMapa]
   );
 
   useEffect(() => {
-    carregarMapa(false);
+    void carregarMapa(false);
     if (!autenticado) return;
 
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") {
-        carregarMapa(true);
+        void carregarMapa(true);
       }
     }, 3500);
 
     const onVis = () => {
       if (document.visibilityState === "visible") {
-        carregarMapa(true);
+        void carregarMapa(true);
       }
     };
     document.addEventListener("visibilitychange", onVis);
@@ -335,9 +523,13 @@ export function GridTaticoCombate({
     return minhasFichas[0] ?? null;
   }, [fichaAtualId, minhasFichas]);
 
-  // Carrega foto local salva do token do jogador
+  // Carrega foto salva do token do jogador (priorizando foto salva no banco e depois localStorage)
   useEffect(() => {
     if (modo !== "jogador") return;
+    if (fichaAlvoJogador?.fotoSalva) {
+      setFotoMeuToken(fichaAlvoJogador.fotoSalva);
+      return;
+    }
     const chave = `cacador_token_foto_${fichaAlvoJogador?.id || "padrao"}`;
     try {
       const salva = localStorage.getItem(chave);
@@ -345,7 +537,7 @@ export function GridTaticoCombate({
     } catch {
       // Ignorar storage indisponível
     }
-  }, [modo, fichaAlvoJogador?.id]);
+  }, [modo, fichaAlvoJogador?.id, fichaAlvoJogador?.fotoSalva]);
 
   const salvarFotoLocalJogador = (dataUrl: string) => {
     setFotoMeuToken(dataUrl);
@@ -358,25 +550,60 @@ export function GridTaticoCombate({
     }
   };
 
-  const salvarMapaMestre = async (novoMapa: MapaTaticoEstado) => {
-    setMapa(novoMapa);
-    try {
-      const res = await fetch("/api/mapa", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(novoMapa),
+  // Dispara uma atualização atômica por escopo no Mestre (nunca sobrescreve imagens/outros campos!)
+  const executarPatchMestre = useCallback(
+    async (
+      otimistaFn: (atual: MapaTaticoEstado) => MapaTaticoEstado,
+      payload: Record<string, unknown>
+    ): Promise<boolean> => {
+      const estadoAnterior = mapaRef.current;
+      atualizarEstadoMapa(otimistaFn);
+
+      return enfileirarMutacao(async () => {
+        try {
+          const res = await fetch("/api/mapa", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            atualizarEstadoMapa(estadoAnterior);
+            onNotify(json.error || "Erro ao salvar alteração no mapa.", "erro");
+            return false;
+          }
+          if (json.versao) {
+            versaoConhecidaRef.current = Math.max(
+              versaoConhecidaRef.current,
+              Number(json.versao)
+            );
+          }
+          if (
+            mutacoesPendentesRef.current <= 1 &&
+            (Array.isArray(json.mapasSalvos) || Array.isArray(json.tokens))
+          ) {
+            atualizarEstadoMapa((atual) => ({
+              ...atual,
+              versao: json.versao || atual.versao,
+              ...(Array.isArray(json.mapasSalvos)
+                ? { mapasSalvos: json.mapasSalvos }
+                : {}),
+              ...(json.retratosSalvos
+                ? { retratosSalvos: json.retratosSalvos }
+                : {}),
+              ...(Array.isArray(json.tokens) ? { tokens: json.tokens } : {}),
+            }));
+          }
+          return true;
+        } catch {
+          atualizarEstadoMapa(estadoAnterior);
+          onNotify("Falha de conexão ao salvar alteração no mapa.", "erro");
+          return false;
+        }
       });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        onNotify(j.error || "Erro ao salvar mapa tático.", "erro");
-        return false;
-      }
-      return true;
-    } catch {
-      onNotify("Falha de conexão ao salvar mapa.", "erro");
-      return false;
-    }
-  };
+    },
+    [atualizarEstadoMapa, enfileirarMutacao, onNotify]
+  );
 
   const fogSet = useMemo(() => new Set(mapa.fogCelulas), [mapa.fogCelulas]);
 
@@ -410,7 +637,6 @@ export function GridTaticoCombate({
     );
   }, [mapa.tokens, fichaAlvoJogador, userEmail]);
 
-  // Permissões efetivas do jogador atual (Global + Individual)
   const idFichaVerificacao =
     meuTokenNoMapa?.fichaId || fichaAlvoJogador?.id || fichaAtualId;
 
@@ -497,7 +723,9 @@ export function GridTaticoCombate({
         chaveId: f.id,
         emailLower,
         nomePersonagem: nome,
-        detalheJogador: jogador ? `${jogador} (${f.owner_email})` : f.owner_email,
+        detalheJogador: jogador
+          ? `${jogador} (${f.owner_email})`
+          : f.owner_email,
       });
     }
 
@@ -520,10 +748,11 @@ export function GridTaticoCombate({
     tipo: "insercao" | "movimento",
     alvo: AlvoPermissaoJogador
   ) => {
+    const atual = mapaRef.current;
     const listaAtual =
       tipo === "insercao"
-        ? mapa.jogadoresTravadosInsercao
-        : mapa.jogadoresTravadosMovimento;
+        ? atual.jogadoresTravadosInsercao
+        : atual.jogadoresTravadosMovimento;
 
     const jaTravado = estaTravadoNaLista(
       listaAtual,
@@ -534,28 +763,25 @@ export function GridTaticoCombate({
     const chLower = alvo.chaveId.trim().toLowerCase();
     const emLower = alvo.emailLower.trim().toLowerCase();
 
-    let novaLista: string[];
-    if (jaTravado) {
-      novaLista = listaAtual.filter((item) => {
-        const norm = item.trim().toLowerCase();
-        if (norm === chLower) return false;
-        if (emLower && norm === emLower) return false;
-        return true;
-      });
-    } else {
-      novaLista = [...listaAtual, alvo.chaveId];
-    }
+    const novaLista = jaTravado
+      ? listaAtual.filter((item) => {
+          const norm = item.trim().toLowerCase();
+          if (norm === chLower) return false;
+          if (emLower && norm === emLower) return false;
+          return true;
+        })
+      : [...listaAtual, alvo.chaveId];
 
     if (tipo === "insercao") {
-      await salvarMapaMestre({
-        ...mapa,
-        jogadoresTravadosInsercao: novaLista,
-      });
+      await executarPatchMestre(
+        (m) => ({ ...m, jogadoresTravadosInsercao: novaLista }),
+        { acao: "atualizar_travas", jogadoresTravadosInsercao: novaLista }
+      );
     } else {
-      await salvarMapaMestre({
-        ...mapa,
-        jogadoresTravadosMovimento: novaLista,
-      });
+      await executarPatchMestre(
+        (m) => ({ ...m, jogadoresTravadosMovimento: novaLista }),
+        { acao: "atualizar_travas", jogadoresTravadosMovimento: novaLista }
+      );
     }
   };
 
@@ -576,7 +802,7 @@ export function GridTaticoCombate({
     };
   };
 
-  // --- Ações do Jogador ---
+  // --- Ações do Jogador (Enfileiradas e Salvas no Banco!) ---
   const atualizarAparenciaTokenJogador = async (opcoes: {
     cor?: string;
     imagemUrl?: string;
@@ -586,27 +812,49 @@ export function GridTaticoCombate({
       salvarFotoLocalJogador(opcoes.imagemUrl);
     }
 
-    if (!meuTokenNoMapa) return;
-
-    const resp = await fetch("/api/mapa", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        acao: "atualizar_aparencia_meu_token",
-        tokenId: meuTokenNoMapa.id,
-        ...(opcoes.cor !== undefined ? { cor: opcoes.cor } : {}),
-        ...(opcoes.imagemUrl !== undefined
-          ? { imagemUrl: opcoes.imagemUrl }
-          : {}),
-      }),
-    });
-
-    if (resp.ok) {
-      await carregarMapa(true);
-    } else {
-      const j = await resp.json().catch(() => ({}));
-      onNotify(j.error || "Erro ao atualizar aparência do token.", "erro");
+    if (meuTokenNoMapa) {
+      atualizarEstadoMapa((atual) => ({
+        ...atual,
+        tokens: atual.tokens.map((t) =>
+          t.id === meuTokenNoMapa.id
+            ? {
+                ...t,
+                ...(opcoes.cor !== undefined ? { cor: opcoes.cor } : {}),
+                ...(opcoes.imagemUrl !== undefined
+                  ? { imagemUrl: opcoes.imagemUrl || undefined }
+                  : {}),
+              }
+            : t
+        ),
+      }));
     }
+
+    await enfileirarMutacao(async () => {
+      const resp = await fetch("/api/mapa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          acao: "atualizar_aparencia_meu_token",
+          tokenId: meuTokenNoMapa?.id,
+          fichaId: fichaAlvoJogador?.id,
+          ...(opcoes.cor !== undefined ? { cor: opcoes.cor } : {}),
+          ...(opcoes.imagemUrl !== undefined
+            ? { imagemUrl: opcoes.imagemUrl }
+            : {}),
+        }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        onNotify(json.error || "Erro ao salvar aparência do token.", "erro");
+        return;
+      }
+      if (json.versao) {
+        versaoConhecidaRef.current = Math.max(
+          versaoConhecidaRef.current,
+          Number(json.versao)
+        );
+      }
+    });
   };
 
   const handleUploadFotoMeuToken = async (
@@ -620,7 +868,7 @@ export function GridTaticoCombate({
     try {
       const comprimida = await comprimirImagemToken(arquivo);
       await atualizarAparenciaTokenJogador({ imagemUrl: comprimida });
-      onNotify("Foto do token carregada!", "sucesso");
+      onNotify("Foto do seu token salva com sucesso!", "sucesso");
     } catch (err) {
       onNotify(
         err instanceof Error ? err.message : "Falha ao processar imagem.",
@@ -656,24 +904,57 @@ export function GridTaticoCombate({
     }
 
     setAguardandoCliquePosicionar(false);
-    const resp = await fetch("/api/mapa", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        acao: "colocar_meu_token",
-        fichaId: fichaAlvoJogador.id,
-        x,
-        y,
-        cor: corMeuToken,
-        imagemUrl: fotoMeuToken || undefined,
-      }),
+
+    const tokenOtimista: TokenMapa = {
+      id: `tok-${fichaAlvoJogador.id.slice(0, 8)}`,
+      nome: fichaAlvoJogador.nome,
+      cor: corMeuToken,
+      sigla: fichaAlvoJogador.sigla,
+      imagemUrl: fotoMeuToken || undefined,
+      x,
+      y,
+      tamanho: 1,
+      tipo: "jogador",
+      fichaId: fichaAlvoJogador.id,
+      ownerEmail: userEmail,
+      oculto: false,
+    };
+
+    const anterior = mapaRef.current;
+    atualizarEstadoMapa((atual) => ({
+      ...atual,
+      tokens: [
+        ...atual.tokens.filter((t) => t.fichaId !== fichaAlvoJogador.id),
+        tokenOtimista,
+      ],
+    }));
+
+    await enfileirarMutacao(async () => {
+      const resp = await fetch("/api/mapa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          acao: "colocar_meu_token",
+          fichaId: fichaAlvoJogador.id,
+          x,
+          y,
+          cor: corMeuToken,
+          imagemUrl: fotoMeuToken || undefined,
+        }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        atualizarEstadoMapa(anterior);
+        onNotify(json.error || "Não foi possível posicionar o token.", "erro");
+        return;
+      }
+      if (json.versao) {
+        versaoConhecidaRef.current = Math.max(
+          versaoConhecidaRef.current,
+          Number(json.versao)
+        );
+      }
     });
-    const json = await resp.json();
-    if (!resp.ok) {
-      onNotify(json.error || "Não foi possível posicionar o token.", "erro");
-      return;
-    }
-    await carregarMapa(true);
   };
 
   const recolherMeuToken = async () => {
@@ -685,23 +966,120 @@ export function GridTaticoCombate({
       );
       return;
     }
-    const resp = await fetch("/api/mapa", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        acao: "recolher_meu_token",
-        tokenId: meuTokenNoMapa.id,
-      }),
+
+    const tokenId = meuTokenNoMapa.id;
+    const anterior = mapaRef.current;
+    atualizarEstadoMapa((atual) => ({
+      ...atual,
+      tokens: atual.tokens.filter((t) => t.id !== tokenId),
+    }));
+
+    await enfileirarMutacao(async () => {
+      const resp = await fetch("/api/mapa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          acao: "recolher_meu_token",
+          tokenId,
+        }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        atualizarEstadoMapa(anterior);
+        onNotify(json.error || "Não foi possível recolher o token.", "erro");
+        return;
+      }
+      if (json.versao) {
+        versaoConhecidaRef.current = Math.max(
+          versaoConhecidaRef.current,
+          Number(json.versao)
+        );
+      }
     });
-    if (resp.ok) {
-      await carregarMapa(true);
-    } else {
-      const j = await resp.json().catch(() => ({}));
-      onNotify(j.error || "Não foi possível recolher o token.", "erro");
+  };
+
+  // --- Configuração, Tamanho do Grid e Salvamento de Imagem (Mestre) ---
+  const salvarTituloCena = async () => {
+    editandoTituloRef.current = false;
+    const limpo = tituloDraft.trim() || "Cena de Conflito";
+    setTituloDraft(limpo);
+    if (limpo === mapaRef.current.titulo) return;
+    await executarPatchMestre((m) => ({ ...m, titulo: limpo }), {
+      acao: "atualizar_config",
+      titulo: limpo,
+    });
+  };
+
+  const aplicarTamanhoGrid = async (novasColunas: number, novasLinhas: number) => {
+    editandoTamanhoRef.current = false;
+    const col = Math.max(6, Math.min(44, Math.round(novasColunas || 20)));
+    const lin = Math.max(6, Math.min(36, Math.round(novasLinhas || 14)));
+    setColunasDraft(String(col));
+    setLinhasDraft(String(lin));
+
+    if (col === mapaRef.current.colunas && lin === mapaRef.current.linhas) {
+      return;
+    }
+
+    await executarPatchMestre(
+      (m) => ({
+        ...m,
+        colunas: col,
+        linhas: lin,
+        tokens: m.tokens.map((t) => {
+          const tam = t.tamanho || 1;
+          return {
+            ...t,
+            x: Math.max(0, Math.min(col - tam, t.x)),
+            y: Math.max(0, Math.min(lin - tam, t.y)),
+          };
+        }),
+      }),
+      {
+        acao: "atualizar_config",
+        colunas: col,
+        linhas: lin,
+      }
+    );
+  };
+
+  const aplicarTamanhoRascunho = () => {
+    const c = Number.parseInt(colunasDraft, 10);
+    const l = Number.parseInt(linhasDraft, 10);
+    void aplicarTamanhoGrid(
+      Number.isNaN(c) ? mapaRef.current.colunas : c,
+      Number.isNaN(l) ? mapaRef.current.linhas : l
+    );
+  };
+
+  const ajustarProporcaoPelaImagem = async () => {
+    const url = mapaRef.current.imagemUrl;
+    if (!url) {
+      onNotify("Envie ou selecione uma imagem de mapa primeiro.", "info");
+      return;
+    }
+    try {
+      const { largura, altura } = await obterDimensoesImagem(url);
+      const colAtual = mapaRef.current.colunas;
+      const linhasProporcionais = Math.max(
+        6,
+        Math.min(36, Math.round(colAtual * (altura / largura)))
+      );
+      await aplicarTamanhoGrid(colAtual, linhasProporcionais);
+      onNotify(
+        `Grade ajustada para ${colAtual}×${linhasProporcionais} conforme a proporção da imagem!`,
+        "sucesso"
+      );
+    } catch (err) {
+      onNotify(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível ler a proporção desta imagem.",
+        "erro"
+      );
     }
   };
 
-  // --- Uploads de Imagem do Computador pelo Mestre ---
   const handleUploadImagemMapaMestre = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -712,9 +1090,22 @@ export function GridTaticoCombate({
     setProcessandoUpload(true);
     try {
       const dataUrl = await comprimirImagemMapa(arquivo);
-      const ok = await salvarMapaMestre({ ...mapa, imagemUrl: dataUrl });
+      const nomeSemExt = arquivo.name.replace(/\.[^/.]+$/, "");
+      const ok = await executarPatchMestre(
+        (m) => ({ ...m, imagemUrl: dataUrl, ajusteImagem: "esticar" }),
+        {
+          acao: "salvar_imagem_mapa",
+          imagemUrl: dataUrl,
+          nomeImagem: nomeSemExt || mNomePadrao(mapaRef.current.titulo),
+          salvarNaGaleria: true,
+          ajusteImagem: "esticar",
+        }
+      );
       if (ok) {
-        onNotify("Imagem do mapa enviada e aplicada com sucesso!", "sucesso");
+        onNotify(
+          "Imagem do mapa salva no banco e adicionada aos Mapas Salvos!",
+          "sucesso"
+        );
       }
     } catch (err) {
       onNotify(
@@ -723,6 +1114,27 @@ export function GridTaticoCombate({
       );
     } finally {
       setProcessandoUpload(false);
+    }
+  };
+
+  const salvarUrlImagemMapaMestre = async () => {
+    const limpo = urlMapaDraft.trim();
+    const ok = await executarPatchMestre(
+      (m) => ({ ...m, imagemUrl: limpo }),
+      {
+        acao: "salvar_imagem_mapa",
+        imagemUrl: limpo,
+        nomeImagem: mapaRef.current.titulo || "Mapa URL",
+        salvarNaGaleria: Boolean(limpo),
+      }
+    );
+    if (ok) {
+      onNotify(
+        limpo
+          ? "URL da imagem salva no mapa!"
+          : "Imagem removida (usando tema tático).",
+        "sucesso"
+      );
     }
   };
 
@@ -758,13 +1170,22 @@ export function GridTaticoCombate({
     setProcessandoUpload(true);
     try {
       const dataUrl = await comprimirImagemToken(arquivo);
-      await salvarMapaMestre({
-        ...mapa,
-        tokens: mapa.tokens.map((t) =>
-          t.id === tokenId ? { ...t, imagemUrl: dataUrl } : t
-        ),
-      });
-      onNotify("Foto do token atualizada!", "sucesso");
+      const ok = await executarPatchMestre(
+        (m) => ({
+          ...m,
+          tokens: m.tokens.map((t) =>
+            t.id === tokenId ? { ...t, imagemUrl: dataUrl } : t
+          ),
+        }),
+        {
+          acao: "editar_token",
+          tokenId,
+          imagemUrl: dataUrl,
+        }
+      );
+      if (ok) {
+        onNotify("Foto do token salva no banco!", "sucesso");
+      }
     } catch (err) {
       onNotify(
         err instanceof Error ? err.message : "Erro ao atualizar foto do token.",
@@ -899,30 +1320,54 @@ export function GridTaticoCombate({
         return;
       }
 
-      const tokensAntigos = mapa.tokens;
-      const novosTokens = mapa.tokens.map((t) =>
-        t.id === token.id ? { ...t, x: alvoX, y: alvoY } : t
-      );
-
       if (modo === "mestre") {
-        await salvarMapaMestre({ ...mapa, tokens: novosTokens });
-      } else {
-        setMapa((prev) => ({ ...prev, tokens: novosTokens }));
-        const resp = await fetch("/api/mapa", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            acao: "mover_meu_token",
+        await executarPatchMestre(
+          (m) => ({
+            ...m,
+            tokens: m.tokens.map((t) =>
+              t.id === token.id ? { ...t, x: alvoX, y: alvoY } : t
+            ),
+          }),
+          {
+            acao: "mover_token",
             tokenId: token.id,
             x: alvoX,
             y: alvoY,
-          }),
-        });
-        if (!resp.ok) {
+          }
+        );
+      } else {
+        const anterior = mapaRef.current;
+        atualizarEstadoMapa((m) => ({
+          ...m,
+          tokens: m.tokens.map((t) =>
+            t.id === token.id ? { ...t, x: alvoX, y: alvoY } : t
+          ),
+        }));
+
+        await enfileirarMutacao(async () => {
+          const resp = await fetch("/api/mapa", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              acao: "mover_meu_token",
+              tokenId: token.id,
+              x: alvoX,
+              y: alvoY,
+            }),
+          });
           const j = await resp.json().catch(() => ({}));
-          setMapa((prev) => ({ ...prev, tokens: tokensAntigos }));
-          onNotify(j.error || "Movimento não permitido.", "erro");
-        }
+          if (!resp.ok) {
+            atualizarEstadoMapa(anterior);
+            onNotify(j.error || "Movimento não permitido.", "erro");
+            return;
+          }
+          if (j.versao) {
+            versaoConhecidaRef.current = Math.max(
+              versaoConhecidaRef.current,
+              Number(j.versao)
+            );
+          }
+        });
       }
       return;
     }
@@ -935,7 +1380,8 @@ export function GridTaticoCombate({
       setSelecaoFog(null);
       interagindoRef.current = false;
 
-      const novoSet = new Set(mapa.fogCelulas);
+      const atual = mapaRef.current;
+      const novoSet = new Set(atual.fogCelulas);
       for (let x = minX; x <= maxX; x += 1) {
         for (let y = minY; y <= maxY; y += 1) {
           const chave = `${x},${y}`;
@@ -943,7 +1389,11 @@ export function GridTaticoCombate({
           else novoSet.delete(chave);
         }
       }
-      await salvarMapaMestre({ ...mapa, fogCelulas: [...novoSet] });
+      const novasCelulas = [...novoSet];
+      await executarPatchMestre((m) => ({ ...m, fogCelulas: novasCelulas }), {
+        acao: "atualizar_fog",
+        fogCelulas: novasCelulas,
+      });
       return;
     }
 
@@ -954,25 +1404,33 @@ export function GridTaticoCombate({
 
   // --- Ações Exclusivas do Mestre ---
   const cobrirTudoComFog = async () => {
+    const atual = mapaRef.current;
     const todas: string[] = [];
-    for (let x = 0; x < mapa.colunas; x += 1) {
-      for (let y = 0; y < mapa.linhas; y += 1) {
+    for (let x = 0; x < atual.colunas; x += 1) {
+      for (let y = 0; y < atual.linhas; y += 1) {
         todas.push(`${x},${y}`);
       }
     }
-    await salvarMapaMestre({ ...mapa, fogCelulas: todas });
+    await executarPatchMestre((m) => ({ ...m, fogCelulas: todas }), {
+      acao: "atualizar_fog",
+      fogCelulas: todas,
+    });
   };
 
   const revelarTodoFog = async () => {
-    await salvarMapaMestre({ ...mapa, fogCelulas: [] });
+    await executarPatchMestre((m) => ({ ...m, fogCelulas: [] }), {
+      acao: "atualizar_fog",
+      fogCelulas: [],
+    });
   };
 
   const encontrarCelulaInicialLivre = (
     tamanho = 1
   ): { x: number; y: number } => {
-    for (let y = 1; y <= Math.max(1, mapa.linhas - tamanho - 1); y += 1) {
-      for (let x = 1; x <= Math.max(1, mapa.colunas - tamanho - 1); x += 1) {
-        if (!mapa.tokens.some((t) => t.x === x && t.y === y)) {
+    const atual = mapaRef.current;
+    for (let y = 1; y <= Math.max(1, atual.linhas - tamanho - 1); y += 1) {
+      for (let x = 1; x <= Math.max(1, atual.colunas - tamanho - 1); x += 1) {
+        if (!atual.tokens.some((t) => t.x === x && t.y === y)) {
           return { x, y };
         }
       }
@@ -980,19 +1438,44 @@ export function GridTaticoCombate({
     return { x: 0, y: 0 };
   };
 
+  const buscarFotoSalvaNoCliente = (opcoes: {
+    fichaId?: string;
+    ameacaId?: string;
+    email?: string;
+  }) => {
+    const retratos = mapaRef.current.retratosSalvos || {};
+    if (opcoes.fichaId) {
+      const f = retratos[`ficha:${opcoes.fichaId.trim().toLowerCase()}`];
+      if (f) return f;
+    }
+    if (opcoes.ameacaId) {
+      const a = retratos[`ameaca:${opcoes.ameacaId.trim().toLowerCase()}`];
+      if (a) return a;
+    }
+    if (opcoes.email) {
+      const e = retratos[`email:${opcoes.email.trim().toLowerCase()}`];
+      if (e) return e;
+    }
+    return undefined;
+  };
+
   const inserirCacadorPeloMestre = async (f: FichaResumoOnline) => {
-    const jaExiste = mapa.tokens.some((t) => t.fichaId === f.id);
-    if (jaExiste) {
+    if (mapaRef.current.tokens.some((t) => t.fichaId === f.id)) {
       onNotify("Este caçador já está posicionado no grid.", "info");
       return;
     }
     const nome = f.dados?.identidade?.nome?.trim() || f.nome || "Caçador";
     const pos = encontrarCelulaInicialLivre(1);
+    const fotoSalva = buscarFotoSalvaNoCliente({
+      fichaId: f.id,
+      email: f.owner_email,
+    });
     const novo: TokenMapa = {
       id: `tok-${f.id.slice(0, 8)}`,
       nome,
       cor: "#f08b21",
       sigla: gerarSigla(nome),
+      imagemUrl: fotoSalva,
       x: pos.x,
       y: pos.y,
       tamanho: 1,
@@ -1001,17 +1484,22 @@ export function GridTaticoCombate({
       ownerEmail: f.owner_email,
       oculto: false,
     };
-    await salvarMapaMestre({ ...mapa, tokens: [...mapa.tokens, novo] });
+    await executarPatchMestre((m) => ({ ...m, tokens: [...m.tokens, novo] }), {
+      acao: "adicionar_token",
+      token: novo,
+    });
   };
 
   const inserirAmeacaPeloMestre = async (a: AmeacaCronica) => {
     const pos = encontrarCelulaInicialLivre(ameacaTamPadrao);
     const ehAliadoPdm = a.categoria === "PdM / Aliado";
+    const fotoSalva = buscarFotoSalvaNoCliente({ ameacaId: a.id });
     const novo: TokenMapa = {
       id: `ame-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
       nome: a.nome,
       cor: ehAliadoPdm ? "#3b82f6" : "#dc2626",
       sigla: gerarSigla(a.nome),
+      imagemUrl: fotoSalva,
       x: pos.x,
       y: pos.y,
       tamanho: ameacaTamPadrao,
@@ -1019,11 +1507,19 @@ export function GridTaticoCombate({
       ameacaId: a.id,
       oculto: ameacaInserirOculta,
     };
-    await salvarMapaMestre({ ...mapa, tokens: [...mapa.tokens, novo] });
-    onNotify(
-      `"${a.nome}" inserido no grid (${ameacaInserirOculta ? "Oculto p/ jogadores" : "Visível"}).`,
-      "info"
+    const ok = await executarPatchMestre(
+      (m) => ({ ...m, tokens: [...m.tokens, novo] }),
+      {
+        acao: "adicionar_token",
+        token: novo,
+      }
     );
+    if (ok) {
+      onNotify(
+        `"${a.nome}" inserido no grid (${ameacaInserirOculta ? "Oculto p/ jogadores" : "Visível"}).`,
+        "info"
+      );
+    }
   };
 
   const criarTokenPersonalizadoMestre = async () => {
@@ -1046,8 +1542,16 @@ export function GridTaticoCombate({
     };
     setNovoTokNome("");
     setNovoTokImagem("");
-    await salvarMapaMestre({ ...mapa, tokens: [...mapa.tokens, novo] });
-    onNotify(`Token "${novo.nome}" adicionado ao mapa!`, "sucesso");
+    const ok = await executarPatchMestre(
+      (m) => ({ ...m, tokens: [...m.tokens, novo] }),
+      {
+        acao: "adicionar_token",
+        token: novo,
+      }
+    );
+    if (ok) {
+      onNotify(`Token "${novo.nome}" salvo no mapa!`, "sucesso");
+    }
   };
 
   const temaSelecionado =
@@ -1056,6 +1560,7 @@ export function GridTaticoCombate({
   const larguraPx = mapa.colunas * CELL_PX * zoom;
   const alturaPx = mapa.linhas * CELL_PX * zoom;
   const cellEscalada = CELL_PX * zoom;
+  const rgbLinhaGrid = obterRgbLinhaGrid(mapa.corGrid || "#ffffff");
 
   const inputCls =
     "w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-[#f08b21] transition";
@@ -1091,6 +1596,7 @@ export function GridTaticoCombate({
   const fotoAtivaJogador = meuTokenNoMapa?.imagemUrl || fotoMeuToken;
   const corAtivaJogador = meuTokenNoMapa?.cor || corMeuToken;
   const imagemMapaEhUploadLocal = mapa.imagemUrl.startsWith("data:image/");
+  const salvandoAgora = salvandoContador > 0 || processandoUpload;
 
   const textoStatusJogador = () => {
     if (!insercaoLiberadaParaMim && !movimentoLiberadoParaMim) {
@@ -1111,7 +1617,7 @@ export function GridTaticoCombate({
     if (!insercaoLiberadaParaMim) {
       return "O Mestre travou a opção de inserir seu token no mapa no momento.";
     }
-    return "Personalize cor/foto do PC e clique em 'Colocar meu token'.";
+    return "Personalize cor/foto do PC (salva automaticamente) e clique em 'Colocar meu token'.";
   };
 
   return (
@@ -1122,16 +1628,26 @@ export function GridTaticoCombate({
           : "bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4"
       }`}
     >
-      {/* CABEÇALHO DO GRID */}
+      {/* CABEÇALHO DO GRID + INDICADOR DE SINCRONIZAÇÃO */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <h3 className="font-display text-xl font-bold uppercase tracking-wide text-zinc-100">
             Grid Tático · {mapa.titulo || "Cena de Conflito"}
           </h3>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Ao vivo
+          <span className="text-xs font-mono text-zinc-500">
+            ({mapa.colunas}×{mapa.linhas})
           </span>
+          {salvandoAgora ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-950/80 text-amber-300 border border-amber-700/60">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Salvando...
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
+              <Check className="w-3 h-3 text-emerald-400" />
+              Salvo · Ao vivo
+            </span>
+          )}
         </div>
 
         {/* Controles de Zoom, Régua e Tela Cheia */}
@@ -1159,7 +1675,7 @@ export function GridTaticoCombate({
               setZoom((z) => Math.max(0.5, Number((z - 0.15).toFixed(2))))
             }
             className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border border-zinc-800 cursor-pointer"
-            title="Diminuir zoom"
+            title="Diminuir zoom da câmera"
           >
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
@@ -1167,6 +1683,7 @@ export function GridTaticoCombate({
             type="button"
             onClick={() => setZoom(1)}
             className="px-2 py-1 rounded-lg bg-zinc-950 text-zinc-300 border border-zinc-800 text-xs font-mono cursor-pointer"
+            title="Resetar zoom para 100%"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -1176,16 +1693,16 @@ export function GridTaticoCombate({
               setZoom((z) => Math.min(1.8, Number((z + 0.15).toFixed(2))))
             }
             className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border border-zinc-800 cursor-pointer"
-            title="Aumentar zoom"
+            title="Aumentar zoom da câmera"
           >
             <ZoomIn className="w-3.5 h-3.5" />
           </button>
 
           <button
             type="button"
-            onClick={() => carregarMapa(false)}
+            onClick={() => void carregarMapa(false)}
             className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border border-zinc-800 cursor-pointer"
-            title="Sincronizar mapa"
+            title="Sincronizar mapa agora"
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
@@ -1210,7 +1727,7 @@ export function GridTaticoCombate({
         </div>
       </div>
 
-      {/* BARRA EXCLUSIVA DO JOGADOR: FOTO DO TOKEN, COR, POSICIONAMENTO E TRAVAS */}
+      {/* BARRA EXCLUSIVA DO JOGADOR */}
       {modo === "jogador" && (
         <div className="p-3.5 rounded-xl bg-zinc-950/90 border border-zinc-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -1261,7 +1778,6 @@ export function GridTaticoCombate({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Seletor de cor do anel/fundo */}
             <div className="flex items-center gap-1 mr-1">
               {CORES_TOKEN.slice(0, 6).map((c) => (
                 <button
@@ -1279,10 +1795,9 @@ export function GridTaticoCombate({
               ))}
             </div>
 
-            {/* Upload de imagem do computador para o token do jogador */}
             <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-medium transition cursor-pointer">
               <Camera className="w-3.5 h-3.5 text-[#f08b21]" />
-              {processandoUpload ? "Enviando..." : "Foto do PC"}
+              {processandoUpload ? "Salvando..." : "Foto do PC"}
               <input
                 type="file"
                 accept="image/*"
@@ -1355,12 +1870,13 @@ export function GridTaticoCombate({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() =>
-                  salvarMapaMestre({
-                    ...mapa,
-                    visivelJogadores: !mapa.visivelJogadores,
-                  })
-                }
+                onClick={() => {
+                  const prox = !mapaRef.current.visivelJogadores;
+                  void executarPatchMestre(
+                    (m) => ({ ...m, visivelJogadores: prox }),
+                    { acao: "atualizar_travas", visivelJogadores: prox }
+                  );
+                }}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
                   mapa.visivelJogadores
                     ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/70"
@@ -1383,13 +1899,17 @@ export function GridTaticoCombate({
               {/* Trava Global de Inserção */}
               <button
                 type="button"
-                onClick={() =>
-                  salvarMapaMestre({
-                    ...mapa,
-                    posicionamentoJogadoresLiberado:
-                      !mapa.posicionamentoJogadoresLiberado,
-                  })
-                }
+                onClick={() => {
+                  const prox =
+                    !mapaRef.current.posicionamentoJogadoresLiberado;
+                  void executarPatchMestre(
+                    (m) => ({ ...m, posicionamentoJogadoresLiberado: prox }),
+                    {
+                      acao: "atualizar_travas",
+                      posicionamentoJogadoresLiberado: prox,
+                    }
+                  );
+                }}
                 title="Travar ou liberar a opção de todos os jogadores colocarem/recolherem tokens"
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
                   mapa.posicionamentoJogadoresLiberado
@@ -1413,13 +1933,16 @@ export function GridTaticoCombate({
               {/* Trava Global de Movimentação */}
               <button
                 type="button"
-                onClick={() =>
-                  salvarMapaMestre({
-                    ...mapa,
-                    movimentoJogadoresLiberado:
-                      !mapa.movimentoJogadoresLiberado,
-                  })
-                }
+                onClick={() => {
+                  const prox = !mapaRef.current.movimentoJogadoresLiberado;
+                  void executarPatchMestre(
+                    (m) => ({ ...m, movimentoJogadoresLiberado: prox }),
+                    {
+                      acao: "atualizar_travas",
+                      movimentoJogadoresLiberado: prox,
+                    }
+                  );
+                }}
                 title="Travar ou liberar a movimentação de todos os jogadores no mapa"
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
                   mapa.movimentoJogadoresLiberado
@@ -1471,7 +1994,7 @@ export function GridTaticoCombate({
                 }`}
               >
                 <Settings className="w-3.5 h-3.5" />
-                Mapa &amp; Tokens
+                Mapa, Grade &amp; Tokens
               </button>
             </div>
 
@@ -1542,13 +2065,22 @@ export function GridTaticoCombate({
                   <button
                     type="button"
                     onClick={() =>
-                      salvarMapaMestre({
-                        ...mapa,
-                        posicionamentoJogadoresLiberado: true,
-                        movimentoJogadoresLiberado: true,
-                        jogadoresTravadosInsercao: [],
-                        jogadoresTravadosMovimento: [],
-                      })
+                      void executarPatchMestre(
+                        (m) => ({
+                          ...m,
+                          posicionamentoJogadoresLiberado: true,
+                          movimentoJogadoresLiberado: true,
+                          jogadoresTravadosInsercao: [],
+                          jogadoresTravadosMovimento: [],
+                        }),
+                        {
+                          acao: "atualizar_travas",
+                          posicionamentoJogadoresLiberado: true,
+                          movimentoJogadoresLiberado: true,
+                          jogadoresTravadosInsercao: [],
+                          jogadoresTravadosMovimento: [],
+                        }
+                      )
                     }
                     className="px-2.5 py-1 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/70 text-emerald-300 border border-emerald-800/60 text-[11px] font-semibold cursor-pointer"
                   >
@@ -1557,11 +2089,18 @@ export function GridTaticoCombate({
                   <button
                     type="button"
                     onClick={() =>
-                      salvarMapaMestre({
-                        ...mapa,
-                        posicionamentoJogadoresLiberado: false,
-                        movimentoJogadoresLiberado: false,
-                      })
+                      void executarPatchMestre(
+                        (m) => ({
+                          ...m,
+                          posicionamentoJogadoresLiberado: false,
+                          movimentoJogadoresLiberado: false,
+                        }),
+                        {
+                          acao: "atualizar_travas",
+                          posicionamentoJogadoresLiberado: false,
+                          movimentoJogadoresLiberado: false,
+                        }
+                      )
                     }
                     className="px-2.5 py-1 rounded-lg bg-red-950/70 hover:bg-red-900/70 text-red-300 border border-red-800/60 text-[11px] font-semibold cursor-pointer"
                   >
@@ -1615,11 +2154,6 @@ export function GridTaticoCombate({
                             onClick={() =>
                               void alternarTravaIndividual("insercao", alvo)
                             }
-                            title={
-                              !mapa.posicionamentoJogadoresLiberado
-                                ? "A trava global de inserção está ativa para todos"
-                                : "Alternar trava de inserção/remoção para este jogador"
-                            }
                             className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold border transition cursor-pointer ${
                               insEfetivamenteTravado
                                 ? "bg-red-950/70 text-red-300 border-red-800/70"
@@ -1638,11 +2172,6 @@ export function GridTaticoCombate({
                             type="button"
                             onClick={() =>
                               void alternarTravaIndividual("movimento", alvo)
-                            }
-                            title={
-                              !mapa.movimentoJogadoresLiberado
-                                ? "A trava global de movimento está ativa para todos"
-                                : "Alternar trava de movimentação para este jogador"
                             }
                             className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold border transition cursor-pointer ${
                               movEfetivamenteTravado
@@ -1666,171 +2195,466 @@ export function GridTaticoCombate({
             </div>
           )}
 
-          {/* PAINEL EXPANSÍVEL DE MAPA, UPLOAD DE IMAGEM E INSERÇÃO DE TOKENS */}
+          {/* PAINEL ORGANIZADO: 1) IMAGEM & MAPAS SALVOS · 2) TAMANHO DA GRADE · 3) TOKENS */}
           {configAberta && (
             <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
-              {/* Configuração do Mapa + Upload do Computador */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
-                    Nome da Cena
-                  </label>
-                  <input
-                    type="text"
-                    value={mapa.titulo}
-                    onChange={(e) =>
-                      setMapa({ ...mapa, titulo: e.target.value })
-                    }
-                    className={inputCls}
-                  />
-                </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* BLOCO 1: CENÁRIO, UPLOAD DE IMAGEM E GALERIA SALVA */}
+                <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/90 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      1. Cenário &amp; Imagem do Mapa
+                    </span>
+                    {mapa.imagemUrl && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
+                        <Check className="w-3 h-3" />
+                        Imagem salva no banco
+                      </span>
+                    )}
+                  </div>
 
-                <div className="lg:col-span-2 space-y-1">
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                    Imagem do Mapa (Upload do PC ou URL)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f08b21]/15 hover:bg-[#f08b21]/25 text-[#f08b21] border border-[#f08b21]/50 text-xs font-semibold cursor-pointer shrink-0">
-                      <Upload className="w-3.5 h-3.5" />
-                      {processandoUpload ? "Processando..." : "Enviar do PC"}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
+                        Nome da Cena
+                      </label>
                       <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleUploadImagemMapaMestre}
-                        disabled={processandoUpload}
-                        className="hidden"
+                        type="text"
+                        value={tituloDraft}
+                        onFocus={() => {
+                          editandoTituloRef.current = true;
+                        }}
+                        onChange={(e) => setTituloDraft(e.target.value)}
+                        onBlur={() => void salvarTituloCena()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        className={inputCls}
                       />
-                    </label>
+                    </div>
 
-                    {imagemMapaEhUploadLocal ? (
-                      <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-emerald-300 min-w-0 flex-1">
-                        <img
-                          src={mapa.imagemUrl}
-                          alt="Preview Mapa"
-                          className="w-5 h-5 rounded object-cover shrink-0"
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
+                        {mapa.imagemUrl
+                          ? "Encaixe da Imagem"
+                          : "Tema Tático (sem imagem)"}
+                      </label>
+                      {mapa.imagemUrl ? (
+                        <select
+                          value={mapa.ajusteImagem || "esticar"}
+                          onChange={(e) => {
+                            const val = e.target.value as "esticar" | "cobrir";
+                            void executarPatchMestre(
+                              (m) => ({ ...m, ajusteImagem: val }),
+                              { acao: "atualizar_config", ajusteImagem: val }
+                            );
+                          }}
+                          className={inputCls}
+                        >
+                          <option value="esticar">
+                            Mostrar Mapa Inteiro (sem cortar bordas)
+                          </option>
+                          <option value="cobrir">
+                            Preencher Grade (cortar sobras)
+                          </option>
+                        </select>
+                      ) : (
+                        <select
+                          value={mapa.temaFundo}
+                          onChange={(e) => {
+                            const tema = e.target.value as TemaFundoMapa;
+                            void executarPatchMestre(
+                              (m) => ({ ...m, temaFundo: tema }),
+                              { acao: "atualizar_config", temaFundo: tema }
+                            );
+                          }}
+                          className={inputCls}
+                        >
+                          {TEMAS_FUNDO.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Upload do PC + URL Externa com botão explícito Salvar */}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 text-xs font-bold uppercase tracking-wider cursor-pointer shrink-0">
+                        <Upload className="w-3.5 h-3.5" />
+                        {processandoUpload
+                          ? "Salvando..."
+                          : "Enviar Mapa do PC"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleUploadImagemMapaMestre}
+                          disabled={processandoUpload}
+                          className="hidden"
                         />
-                        <span className="truncate">Imagem do PC ativa</span>
+                      </label>
+
+                      {mapa.imagemUrl && (
                         <button
                           type="button"
                           onClick={() =>
-                            salvarMapaMestre({ ...mapa, imagemUrl: "" })
+                            void executarPatchMestre(
+                              (m) => ({ ...m, imagemUrl: "" }),
+                              {
+                                acao: "salvar_imagem_mapa",
+                                imagemUrl: "",
+                                salvarNaGaleria: false,
+                              }
+                            )
                           }
-                          className="ml-auto text-zinc-400 hover:text-red-400 cursor-pointer"
-                          title="Remover imagem do mapa"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-red-300 border border-zinc-800 text-xs cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
+                          Usar fundo tático (sem imagem)
                         </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 flex-1 min-w-0">
+                      )}
+                    </div>
+
+                    {!imagemMapaEhUploadLocal && (
+                      <div className="flex items-center gap-1.5">
                         <input
                           type="url"
-                          value={mapa.imagemUrl}
-                          onChange={(e) =>
-                            setMapa({ ...mapa, imagemUrl: e.target.value })
-                          }
-                          placeholder="Ou cole URL https://..."
+                          value={urlMapaDraft}
+                          onChange={(e) => setUrlMapaDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              void salvarUrlImagemMapaMestre();
+                            }
+                          }}
+                          placeholder="Ou cole URL https:// da imagem e clique em Salvar URL..."
                           className={inputCls}
                         />
-                        {mapa.imagemUrl && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              salvarMapaMestre({ ...mapa, imagemUrl: "" })
-                            }
-                            className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-red-400 border border-zinc-800 cursor-pointer"
-                            title="Limpar URL"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => void salvarUrlImagemMapaMestre()}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold shrink-0 cursor-pointer"
+                        >
+                          Salvar URL
+                        </button>
                       </div>
                     )}
                   </div>
+
+                  {/* Galeria Persistente de Mapas Salvos no Banco */}
+                  {mapa.mapasSalvos && mapa.mapasSalvos.length > 0 && (
+                    <div className="pt-2 border-t border-zinc-800/80 space-y-1.5">
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                        Mapas Salvos no Banco (clique para reutilizar)
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {mapa.mapasSalvos.map((item) => {
+                          const ativo = mapa.imagemUrl === item.imagemUrl;
+                          return (
+                            <div
+                              key={item.id}
+                              className={`inline-flex items-center gap-1.5 pl-1.5 pr-1 py-1 rounded-lg border text-xs transition ${
+                                ativo
+                                  ? "bg-[#f08b21]/15 border-[#f08b21] text-zinc-100"
+                                  : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void executarPatchMestre(
+                                    (m) => ({
+                                      ...m,
+                                      imagemUrl: item.imagemUrl,
+                                    }),
+                                    {
+                                      acao: "salvar_imagem_mapa",
+                                      imagemUrl: item.imagemUrl,
+                                      nomeImagem: item.nome,
+                                      salvarNaGaleria: false,
+                                    }
+                                  )
+                                }
+                                className="inline-flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <img
+                                  src={item.imagemUrl}
+                                  alt={item.nome}
+                                  className="w-6 h-6 rounded object-cover border border-zinc-700"
+                                />
+                                <span className="max-w-[110px] truncate font-medium">
+                                  {item.nome}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void executarPatchMestre(
+                                    (m) => ({
+                                      ...m,
+                                      mapasSalvos: (m.mapasSalvos || []).filter(
+                                        (x) => x.id !== item.id
+                                      ),
+                                    }),
+                                    {
+                                      acao: "remover_mapa_salvo",
+                                      mapaSalvoId: item.id,
+                                    }
+                                  )
+                                }
+                                className="p-0.5 text-zinc-500 hover:text-red-400 cursor-pointer"
+                                title="Excluir da galeria de mapas salvos"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
-                    Tema (se sem imagem)
-                  </label>
-                  <select
-                    value={mapa.temaFundo}
-                    onChange={(e) =>
-                      setMapa({
-                        ...mapa,
-                        temaFundo: e.target.value as TemaFundoMapa,
-                      })
-                    }
-                    className={inputCls}
-                  >
-                    {TEMAS_FUNDO.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
-                      Colunas
-                    </label>
-                    <input
-                      type="number"
-                      min={6}
-                      max={40}
-                      value={mapa.colunas}
-                      onChange={(e) =>
-                        setMapa({
-                          ...mapa,
-                          colunas: Math.max(
-                            6,
-                            Math.min(40, Number(e.target.value || 20))
-                          ),
-                        })
-                      }
-                      className={inputCls}
-                    />
+                {/* BLOCO 2: TAMANHO DO GRID & APARÊNCIA DAS LINHAS (CLARO E DIRETO!) */}
+                <div className="p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/90 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      <Grid3X3 className="w-3.5 h-3.5 text-[#f08b21]" />
+                      2. Tamanho do Grid &amp; Grade
+                    </span>
+                    <span className="text-[11px] font-mono text-zinc-400">
+                      {mapa.colunas} × {mapa.linhas} q (
+                      {(mapa.colunas * 1.5).toFixed(0)}m ×{" "}
+                      {(mapa.linhas * 1.5).toFixed(0)}m)
+                    </span>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
-                      Linhas
-                    </label>
-                    <input
-                      type="number"
-                      min={6}
-                      max={32}
-                      value={mapa.linhas}
-                      onChange={(e) =>
-                        setMapa({
-                          ...mapa,
-                          linhas: Math.max(
-                            6,
-                            Math.min(32, Number(e.target.value || 14))
-                          ),
-                        })
-                      }
-                      className={inputCls}
-                    />
+
+                  {/* Presets Rápidos de 1 Clique */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {PRESETS_TAMANHO_GRID.map((p) => {
+                      const ativo =
+                        mapa.colunas === p.colunas && mapa.linhas === p.linhas;
+                      return (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() =>
+                            void aplicarTamanhoGrid(p.colunas, p.linhas)
+                          }
+                          className={`px-2 py-1.5 rounded-lg border text-center transition cursor-pointer ${
+                            ativo
+                              ? "bg-[#f08b21] text-zinc-950 border-[#f08b21] font-bold"
+                              : "bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800"
+                          }`}
+                        >
+                          <span className="block text-[11px] leading-tight">
+                            {p.label}
+                          </span>
+                          <span className="block text-[10px] opacity-80 font-mono">
+                            {p.detalhe}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Ajuste Fino Largura × Altura com botões -/+ e digitação livre */}
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
+                        Largura (6 a 44 q)
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void aplicarTamanhoGrid(
+                              mapa.colunas - 1,
+                              mapa.linhas
+                            )
+                          }
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 cursor-pointer"
+                          title="Diminuir 1 coluna"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={colunasDraft}
+                          onFocus={() => {
+                            editandoTamanhoRef.current = true;
+                          }}
+                          onChange={(e) =>
+                            setColunasDraft(
+                              e.target.value.replace(/[^0-9]/g, "")
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") aplicarTamanhoRascunho();
+                          }}
+                          className="w-full px-2 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-center font-mono text-xs text-zinc-100 focus:outline-none focus:border-[#f08b21]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void aplicarTamanhoGrid(
+                              mapa.colunas + 1,
+                              mapa.linhas
+                            )
+                          }
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 cursor-pointer"
+                          title="Aumentar 1 coluna"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
+                        Altura (6 a 36 q)
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void aplicarTamanhoGrid(
+                              mapa.colunas,
+                              mapa.linhas - 1
+                            )
+                          }
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 cursor-pointer"
+                          title="Diminuir 1 linha"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={linhasDraft}
+                          onFocus={() => {
+                            editandoTamanhoRef.current = true;
+                          }}
+                          onChange={(e) =>
+                            setLinhasDraft(
+                              e.target.value.replace(/[^0-9]/g, "")
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") aplicarTamanhoRascunho();
+                          }}
+                          className="w-full px-2 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-center font-mono text-xs text-zinc-100 focus:outline-none focus:border-[#f08b21]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void aplicarTamanhoGrid(
+                              mapa.colunas,
+                              mapa.linhas + 1
+                            )
+                          }
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 cursor-pointer"
+                          title="Aumentar 1 linha"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={aplicarTamanhoRascunho}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold cursor-pointer h-[32px]"
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+
+                  {/* Ajustar proporção à imagem + Cor/Opacidade da Grade */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-zinc-800/80">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                        Linhas:
+                      </span>
+                      {NIVEIS_OPACIDADE_GRID.map((nv) => {
+                        const ativo =
+                          Math.abs((mapa.opacidadeGrid ?? 0.32) - nv.valor) <
+                          0.05;
+                        return (
+                          <button
+                            key={nv.label}
+                            type="button"
+                            onClick={() =>
+                              void executarPatchMestre(
+                                (m) => ({ ...m, opacidadeGrid: nv.valor }),
+                                {
+                                  acao: "atualizar_config",
+                                  opacidadeGrid: nv.valor,
+                                }
+                              )
+                            }
+                            className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer ${
+                              ativo
+                                ? "bg-zinc-200 text-zinc-950 border-zinc-200 font-semibold"
+                                : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                            }`}
+                          >
+                            {nv.label}
+                          </button>
+                        );
+                      })}
+
+                      {CORES_LINHA_GRID.map((cg) => {
+                        const ativa =
+                          (mapa.corGrid || "#ffffff").toLowerCase() === cg.id;
+                        return (
+                          <button
+                            key={cg.id}
+                            type="button"
+                            onClick={() =>
+                              void executarPatchMestre(
+                                (m) => ({ ...m, corGrid: cg.id }),
+                                { acao: "atualizar_config", corGrid: cg.id }
+                              )
+                            }
+                            className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer ${
+                              ativa
+                                ? "border-[#f08b21] text-[#f08b21] bg-[#f08b21]/10 font-semibold"
+                                : "border-zinc-800 text-zinc-400 bg-zinc-950"
+                            }`}
+                          >
+                            {cg.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {mapa.imagemUrl && (
+                      <button
+                        type="button"
+                        onClick={() => void ajustarProporcaoPelaImagem()}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#f08b21]/15 hover:bg-[#f08b21]/25 text-[#f08b21] border border-[#f08b21]/40 text-[11px] font-semibold cursor-pointer"
+                        title="Calcula automaticamente a Altura (linhas) ideal para não achatar nem esticar a imagem do mapa"
+                      >
+                        <Proportions className="w-3.5 h-3.5" />
+                        Ajustar à Proporção da Imagem
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => salvarMapaMestre(mapa)}
-                  className="px-3.5 py-1.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 font-semibold text-xs uppercase tracking-wider cursor-pointer h-[32px]"
-                >
-                  Salvar Mapa
-                </button>
               </div>
 
-              {/* INSERÇÃO DE TOKENS: CAÇADORES, AMEAÇAS/PDMs E TOKENS PERSONALIZADOS */}
+              {/* BLOCO 3: INSERÇÃO E GERENCIAMENTO DE TOKENS */}
               <div className="pt-3 border-t border-zinc-800 space-y-3">
-                {/* 1. Caçadores da Crônica */}
+                {/* Caçadores da Crônica */}
                 <div className="space-y-1.5">
                   <span className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                    Caçadores da Crônica
+                    3. Inserir Caçadores da Crônica (mantém foto salva)
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {fichasCronicaMestre.length === 0 ? (
@@ -1847,7 +2671,7 @@ export function GridTaticoCombate({
                           <button
                             key={f.id}
                             type="button"
-                            onClick={() => inserirCacadorPeloMestre(f)}
+                            onClick={() => void inserirCacadorPeloMestre(f)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs cursor-pointer"
                           >
                             <UserPlus className="w-3 h-3 text-[#f08b21]" />+{" "}
@@ -1859,7 +2683,7 @@ export function GridTaticoCombate({
                   </div>
                 </div>
 
-                {/* 2. Ameaças, Monstros, Rivais e PdMs cadastrados */}
+                {/* Ameaças, PdMs & NPCs cadastrados */}
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
@@ -1896,9 +2720,9 @@ export function GridTaticoCombate({
                   <div className="flex flex-wrap gap-2">
                     {ameacasMestre.length === 0 ? (
                       <span className="text-xs text-zinc-500">
-                        Crie fichas de Ameaças e PdMs na aba &ldquo;Ameaças &amp;
-                        PdMs&rdquo; para inseri-las com 1 clique, ou crie tokens
-                        personalizados abaixo.
+                        Crie fichas na aba &ldquo;Ameaças &amp; PdMs&rdquo; para
+                        inseri-las com 1 clique, ou crie tokens personalizados
+                        abaixo.
                       </span>
                     ) : (
                       ameacasMestre.map((a) => {
@@ -1907,7 +2731,7 @@ export function GridTaticoCombate({
                           <button
                             key={a.id}
                             type="button"
-                            onClick={() => inserirAmeacaPeloMestre(a)}
+                            onClick={() => void inserirAmeacaPeloMestre(a)}
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs cursor-pointer ${
                               ehPdm
                                 ? "bg-blue-950/40 hover:bg-blue-950/70 text-blue-200 border-blue-800/60"
@@ -1930,7 +2754,7 @@ export function GridTaticoCombate({
                   </div>
                 </div>
 
-                {/* 3. Criar Token Personalizado / NPC / Objeto com Upload de Foto */}
+                {/* Criar Token Personalizado / NPC / Objeto */}
                 <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/90 space-y-2.5">
                   <span className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
                     Criar Token Personalizado (Ameaça, NPC, Aliado, Veículo ou
@@ -1942,6 +2766,11 @@ export function GridTaticoCombate({
                       type="text"
                       value={novoTokNome}
                       onChange={(e) => setNovoTokNome(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          void criarTokenPersonalizadoMestre();
+                        }
+                      }}
                       placeholder="Nome (ex: Lobisomem, Policial, Van, Altar...)"
                       className={inputCls}
                     />
@@ -1977,7 +2806,6 @@ export function GridTaticoCombate({
                       className="w-full h-[32px] rounded bg-zinc-950 border border-zinc-800 cursor-pointer"
                     />
 
-                    {/* Botão de Upload de Foto para o Token Personalizado */}
                     <div className="flex items-center gap-1">
                       <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs cursor-pointer">
                         {novoTokImagem ? (
@@ -2022,7 +2850,7 @@ export function GridTaticoCombate({
 
                     <button
                       type="button"
-                      onClick={criarTokenPersonalizadoMestre}
+                      onClick={() => void criarTokenPersonalizadoMestre()}
                       className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 text-xs font-bold uppercase tracking-wider cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -2031,7 +2859,7 @@ export function GridTaticoCombate({
                   </div>
                 </div>
 
-                {/* 4. Lista e Edição Rápida de Tokens Ativos no Mapa */}
+                {/* Lista e Edição Rápida de Tokens Ativos no Mapa */}
                 {mapa.tokens.length > 0 && (
                   <div className="space-y-1.5 pt-1">
                     <div className="flex items-center justify-between">
@@ -2042,7 +2870,10 @@ export function GridTaticoCombate({
                       <button
                         type="button"
                         onClick={() =>
-                          salvarMapaMestre({ ...mapa, tokens: [] })
+                          void executarPatchMestre(
+                            (m) => ({ ...m, tokens: [] }),
+                            { acao: "limpar_tokens" }
+                          )
                         }
                         className="text-[11px] text-red-400 hover:underline cursor-pointer"
                       >
@@ -2076,25 +2907,29 @@ export function GridTaticoCombate({
                             {t.nome}
                           </span>
 
-                          {/* Alterar tamanho rapidamente */}
                           <select
                             value={t.tamanho || 1}
-                            onChange={(e) =>
-                              salvarMapaMestre({
-                                ...mapa,
-                                tokens: mapa.tokens.map((x) =>
-                                  x.id === t.id
-                                    ? {
-                                        ...x,
-                                        tamanho: Number(e.target.value) as
-                                          | 1
-                                          | 2
-                                          | 3,
-                                      }
-                                    : x
-                                ),
-                              })
-                            }
+                            onChange={(e) => {
+                              const novoTam = Number(e.target.value) as
+                                | 1
+                                | 2
+                                | 3;
+                              void executarPatchMestre(
+                                (m) => ({
+                                  ...m,
+                                  tokens: m.tokens.map((x) =>
+                                    x.id === t.id
+                                      ? { ...x, tamanho: novoTam }
+                                      : x
+                                  ),
+                                }),
+                                {
+                                  acao: "editar_token",
+                                  tokenId: t.id,
+                                  tamanho: novoTam,
+                                }
+                              );
+                            }}
                             className="px-1 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-[10px] text-zinc-300"
                             title="Tamanho do token"
                           >
@@ -2103,10 +2938,9 @@ export function GridTaticoCombate({
                             <option value={3}>3×3</option>
                           </select>
 
-                          {/* Enviar/trocar foto de qualquer token já posicionado */}
                           <label
                             className="p-1 rounded text-zinc-400 hover:text-[#f08b21] cursor-pointer"
-                            title="Enviar foto do PC para este token"
+                            title="Enviar foto do PC para este token (fica salva)"
                           >
                             <Camera className="w-3.5 h-3.5" />
                             <input
@@ -2126,14 +2960,21 @@ export function GridTaticoCombate({
                             <button
                               type="button"
                               onClick={() =>
-                                salvarMapaMestre({
-                                  ...mapa,
-                                  tokens: mapa.tokens.map((x) =>
-                                    x.id === t.id
-                                      ? { ...x, imagemUrl: undefined }
-                                      : x
-                                  ),
-                                })
+                                void executarPatchMestre(
+                                  (m) => ({
+                                    ...m,
+                                    tokens: m.tokens.map((x) =>
+                                      x.id === t.id
+                                        ? { ...x, imagemUrl: undefined }
+                                        : x
+                                    ),
+                                  }),
+                                  {
+                                    acao: "editar_token",
+                                    tokenId: t.id,
+                                    imagemUrl: "",
+                                  }
+                                )
                               }
                               className="p-0.5 rounded text-zinc-500 hover:text-amber-400 cursor-pointer"
                               title="Remover foto deste token"
@@ -2144,16 +2985,24 @@ export function GridTaticoCombate({
 
                           <button
                             type="button"
-                            onClick={() =>
-                              salvarMapaMestre({
-                                ...mapa,
-                                tokens: mapa.tokens.map((x) =>
-                                  x.id === t.id
-                                    ? { ...x, oculto: !x.oculto }
-                                    : x
-                                ),
-                              })
-                            }
+                            onClick={() => {
+                              const proxOculto = !t.oculto;
+                              void executarPatchMestre(
+                                (m) => ({
+                                  ...m,
+                                  tokens: m.tokens.map((x) =>
+                                    x.id === t.id
+                                      ? { ...x, oculto: proxOculto }
+                                      : x
+                                  ),
+                                }),
+                                {
+                                  acao: "editar_token",
+                                  tokenId: t.id,
+                                  oculto: proxOculto,
+                                }
+                              );
+                            }}
                             title={
                               t.oculto
                                 ? "Token oculto para jogadores (clique para revelar)"
@@ -2173,12 +3022,15 @@ export function GridTaticoCombate({
                           <button
                             type="button"
                             onClick={() =>
-                              salvarMapaMestre({
-                                ...mapa,
-                                tokens: mapa.tokens.filter(
-                                  (x) => x.id !== t.id
-                                ),
-                              })
+                              void executarPatchMestre(
+                                (m) => ({
+                                  ...m,
+                                  tokens: m.tokens.filter(
+                                    (x) => x.id !== t.id
+                                  ),
+                                }),
+                                { acao: "remover_token", tokenId: t.id }
+                              )
                             }
                             className="p-1 rounded text-zinc-500 hover:text-red-400 cursor-pointer"
                             title="Remover token do mapa"
@@ -2215,8 +3067,10 @@ export function GridTaticoCombate({
               ...(mapa.imagemUrl
                 ? {
                     backgroundImage: `url("${mapa.imagemUrl}")`,
-                    backgroundSize: "cover",
+                    backgroundSize:
+                      mapa.ajusteImagem === "cobrir" ? "cover" : "100% 100%",
                     backgroundPosition: "center",
+                    backgroundRepeat: "no-repeat",
                     backgroundColor: "#111114",
                   }
                 : temaSelecionado.estiloCss),
@@ -2234,13 +3088,15 @@ export function GridTaticoCombate({
             }`}
           >
             {/* Linhas da Grade */}
-            <div
-              style={{
-                backgroundSize: `${cellEscalada}px ${cellEscalada}px`,
-                backgroundImage: `linear-gradient(to right, rgba(255,255,255,${mapa.opacidadeGrid}) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,${mapa.opacidadeGrid}) 1px, transparent 1px)`,
-              }}
-              className="absolute inset-0 pointer-events-none"
-            />
+            {mapa.opacidadeGrid > 0 && (
+              <div
+                style={{
+                  backgroundSize: `${cellEscalada}px ${cellEscalada}px`,
+                  backgroundImage: `linear-gradient(to right, rgba(${rgbLinhaGrid},${mapa.opacidadeGrid}) 1px, transparent 1px), linear-gradient(to bottom, rgba(${rgbLinhaGrid},${mapa.opacidadeGrid}) 1px, transparent 1px)`,
+                }}
+                className="absolute inset-0 pointer-events-none"
+              />
+            )}
 
             {/* Camada de Fog of War */}
             {mapa.fogCelulas.map((coord) => {
@@ -2429,4 +3285,8 @@ export function GridTaticoCombate({
       </div>
     </div>
   );
+}
+
+function mNomePadrao(titulo: string): string {
+  return titulo?.trim() || "Mapa Enviado";
 }

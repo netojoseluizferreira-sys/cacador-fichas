@@ -3,12 +3,17 @@
 function carregarImagemDeArquivo(arquivo: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     if (!arquivo.type.startsWith("image/")) {
-      reject(new Error("Selecione um arquivo de imagem válido (PNG, JPG, WebP, GIF)."));
+      reject(
+        new Error(
+          "Selecione um arquivo de imagem válido (PNG, JPG, WebP, GIF)."
+        )
+      );
       return;
     }
 
     const leitor = new FileReader();
-    leitor.onerror = () => reject(new Error("Erro ao ler o arquivo de imagem."));
+    leitor.onerror = () =>
+      reject(new Error("Erro ao ler o arquivo de imagem."));
     leitor.onload = () => {
       const img = new Image();
       img.onload = () => resolve(img);
@@ -31,12 +36,39 @@ function exportarCanvasOtimizado(
 }
 
 /**
- * Redimensiona e comprime uma imagem de mapa do computador (máx. 1600px, WebP)
- * para carregamento rápido e armazenamento leve no banco.
+ * Lê as dimensões reais de uma imagem (dataURL ou URL externa) para calcular proporção do grid.
+ */
+export function obterDimensoesImagem(
+  src: string
+): Promise<{ largura: number; altura: number }> {
+  return new Promise((resolve, reject) => {
+    if (!src.trim()) {
+      reject(new Error("Nenhuma imagem informada."));
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const largura = img.naturalWidth || img.width;
+      const altura = img.naturalHeight || img.height;
+      if (!largura || !altura) {
+        reject(new Error("Não foi possível ler as dimensões da imagem."));
+        return;
+      }
+      resolve({ largura, altura });
+    };
+    img.onerror = () =>
+      reject(new Error("Não foi possível carregar a imagem informada."));
+    img.src = src;
+  });
+}
+
+/**
+ * Redimensiona e comprime uma imagem de mapa do computador (máx. 1440px, WebP)
+ * para salvamento rápido e estável no banco de dados.
  */
 export async function comprimirImagemMapa(arquivo: File): Promise<string> {
   const img = await carregarImagemDeArquivo(arquivo);
-  const maxDim = 1600;
+  const maxDim = 1440;
   let largura = img.naturalWidth || img.width;
   let altura = img.naturalHeight || img.height;
 
@@ -55,7 +87,7 @@ export async function comprimirImagemMapa(arquivo: File): Promise<string> {
   }
 
   ctx.drawImage(img, 0, 0, largura, altura);
-  return exportarCanvasOtimizado(canvas, 0.78);
+  return exportarCanvasOtimizado(canvas, 0.76);
 }
 
 /**

@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { obterEmailAdmin, obterUsuarioSessao } from "@/lib/auth";
 import type {
+  MapaImagemSalva,
   MapaTaticoEstado,
   TemaFundoMapa,
   TokenMapa,
@@ -18,11 +19,11 @@ import type {
 } from "@/types/ficha";
 
 const TokenSchema = z.object({
-  id: z.string(),
-  nome: z.string(),
-  cor: z.string().default("#f08b21"),
+  id: z.string().min(1),
+  nome: z.string().min(1).max(120),
+  cor: z.string().max(32).default("#f08b21"),
   sigla: z.string().max(4).default("CA"),
-  imagemUrl: z.string().max(450_000).optional(),
+  imagemUrl: z.string().max(500_000).optional(),
   x: z.number().int().min(0).max(60),
   y: z.number().int().min(0).max(60),
   tamanho: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
@@ -33,24 +34,100 @@ const TokenSchema = z.object({
   oculto: z.boolean().optional(),
 });
 
+const MapaSalvoItemSchema = z.object({
+  id: z.string().min(1),
+  nome: z.string().max(120),
+  imagemUrl: z.string().max(3_000_000),
+});
+
 const SalvarMapaMestreSchema = z.object({
+  versao: z.number().int().optional(),
   visivelJogadores: z.boolean().default(false),
   posicionamentoJogadoresLiberado: z.boolean().default(true),
   movimentoJogadoresLiberado: z.boolean().default(true),
   jogadoresTravadosInsercao: z.array(z.string()).max(200).default([]),
   jogadoresTravadosMovimento: z.array(z.string()).max(200).default([]),
   titulo: z.string().max(120).default("Cena de Conflito"),
-  imagemUrl: z.string().max(2_500_000).default(""),
+  imagemUrl: z.string().max(3_000_000).default(""),
+  ajusteImagem: z.enum(["esticar", "cobrir"]).default("esticar"),
   temaFundo: z
     .enum(["asfalto", "galpao", "hospital", "subterraneo", "floresta"])
     .default("asfalto"),
-  colunas: z.number().int().min(6).max(40).default(20),
-  linhas: z.number().int().min(6).max(32).default(14),
-  opacidadeGrid: z.number().min(0.05).max(1).default(0.3),
+  colunas: z.number().int().min(6).max(44).default(20),
+  linhas: z.number().int().min(6).max(36).default(14),
+  opacidadeGrid: z.number().min(0).max(1).default(0.28),
   corGrid: z.string().max(32).default("#ffffff"),
-  fogCelulas: z.array(z.string()).max(2000).default([]),
+  fogCelulas: z.array(z.string()).max(2500).default([]),
   tokens: z.array(TokenSchema).max(150).default([]),
+  mapasSalvos: z.array(MapaSalvoItemSchema).max(8).optional(),
+  retratosSalvos: z.record(z.string(), z.string().max(500_000)).optional(),
 });
+
+const PatchMestreSchema = z.discriminatedUnion("acao", [
+  z.object({
+    acao: z.literal("atualizar_travas"),
+    visivelJogadores: z.boolean().optional(),
+    posicionamentoJogadoresLiberado: z.boolean().optional(),
+    movimentoJogadoresLiberado: z.boolean().optional(),
+    jogadoresTravadosInsercao: z.array(z.string()).max(200).optional(),
+    jogadoresTravadosMovimento: z.array(z.string()).max(200).optional(),
+  }),
+  z.object({
+    acao: z.literal("atualizar_config"),
+    titulo: z.string().max(120).optional(),
+    temaFundo: z
+      .enum(["asfalto", "galpao", "hospital", "subterraneo", "floresta"])
+      .optional(),
+    colunas: z.number().int().min(6).max(44).optional(),
+    linhas: z.number().int().min(6).max(36).optional(),
+    opacidadeGrid: z.number().min(0).max(1).optional(),
+    corGrid: z.string().max(32).optional(),
+    ajusteImagem: z.enum(["esticar", "cobrir"]).optional(),
+  }),
+  z.object({
+    acao: z.literal("salvar_imagem_mapa"),
+    imagemUrl: z.string().max(3_000_000),
+    nomeImagem: z.string().max(120).optional(),
+    salvarNaGaleria: z.boolean().optional(),
+    ajusteImagem: z.enum(["esticar", "cobrir"]).optional(),
+    colunas: z.number().int().min(6).max(44).optional(),
+    linhas: z.number().int().min(6).max(36).optional(),
+  }),
+  z.object({
+    acao: z.literal("remover_mapa_salvo"),
+    mapaSalvoId: z.string().min(1),
+  }),
+  z.object({
+    acao: z.literal("atualizar_fog"),
+    fogCelulas: z.array(z.string()).max(2500),
+  }),
+  z.object({
+    acao: z.literal("mover_token"),
+    tokenId: z.string().min(1),
+    x: z.number().int().min(0).max(60),
+    y: z.number().int().min(0).max(60),
+  }),
+  z.object({
+    acao: z.literal("adicionar_token"),
+    token: TokenSchema,
+  }),
+  z.object({
+    acao: z.literal("editar_token"),
+    tokenId: z.string().min(1),
+    oculto: z.boolean().optional(),
+    tamanho: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+    cor: z.string().max(32).optional(),
+    nome: z.string().min(1).max(120).optional(),
+    imagemUrl: z.string().max(500_000).optional(),
+  }),
+  z.object({
+    acao: z.literal("remover_token"),
+    tokenId: z.string().min(1),
+  }),
+  z.object({
+    acao: z.literal("limpar_tokens"),
+  }),
+]);
 
 const AcaoJogadorSchema = z.discriminatedUnion("acao", [
   z.object({
@@ -58,8 +135,8 @@ const AcaoJogadorSchema = z.discriminatedUnion("acao", [
     fichaId: z.uuid(),
     x: z.number().int().min(0).max(60),
     y: z.number().int().min(0).max(60),
-    cor: z.string().max(24).optional(),
-    imagemUrl: z.string().max(450_000).optional(),
+    cor: z.string().max(32).optional(),
+    imagemUrl: z.string().max(500_000).optional(),
   }),
   z.object({
     acao: z.literal("mover_meu_token"),
@@ -73,9 +150,10 @@ const AcaoJogadorSchema = z.discriminatedUnion("acao", [
   }),
   z.object({
     acao: z.literal("atualizar_aparencia_meu_token"),
-    tokenId: z.string().min(1),
-    cor: z.string().max(24).optional(),
-    imagemUrl: z.string().max(450_000).optional(),
+    tokenId: z.string().optional(),
+    fichaId: z.string().optional(),
+    cor: z.string().max(32).optional(),
+    imagemUrl: z.string().max(500_000).optional(),
   }),
 ]);
 
@@ -94,7 +172,10 @@ function normalizarMapa(
       ? bruto.temaFundo
       : "asfalto";
 
+  const ajuste = bruto?.ajusteImagem === "cobrir" ? "cobrir" : "esticar";
+
   return {
+    versao: Math.max(1, Number(bruto?.versao || 1)),
     visivelJogadores: Boolean(bruto?.visivelJogadores),
     posicionamentoJogadoresLiberado:
       bruto?.posicionamentoJogadoresLiberado === undefined
@@ -112,18 +193,122 @@ function normalizarMapa(
       : [],
     titulo: String(bruto?.titulo || "Cena de Conflito"),
     imagemUrl: String(bruto?.imagemUrl || ""),
+    ajusteImagem: ajuste,
     temaFundo: tema,
-    colunas: Math.max(6, Math.min(40, Number(bruto?.colunas || 20))),
-    linhas: Math.max(6, Math.min(32, Number(bruto?.linhas || 14))),
+    colunas: Math.max(6, Math.min(44, Number(bruto?.colunas || 20))),
+    linhas: Math.max(6, Math.min(36, Number(bruto?.linhas || 14))),
     opacidadeGrid: Math.max(
-      0.05,
+      0,
       Math.min(1, Number(bruto?.opacidadeGrid ?? 0.28))
     ),
     corGrid: String(bruto?.corGrid || "#ffffff"),
     fogCelulas: Array.isArray(bruto?.fogCelulas) ? bruto.fogCelulas : [],
     tokens: Array.isArray(bruto?.tokens) ? bruto.tokens : [],
+    mapasSalvos: Array.isArray(bruto?.mapasSalvos)
+      ? bruto.mapasSalvos.slice(0, 6)
+      : [],
+    retratosSalvos:
+      bruto?.retratosSalvos && typeof bruto.retratosSalvos === "object"
+        ? { ...bruto.retratosSalvos }
+        : {},
     updatedAt: bruto?.updatedAt || "",
   };
+}
+
+function registrarRetratoToken(
+  retratos: Record<string, string>,
+  opcoes: {
+    fichaId?: string;
+    ameacaId?: string;
+    email?: string;
+    imagemUrl?: string;
+  }
+) {
+  if (opcoes.imagemUrl === undefined) return;
+  const chaves: string[] = [];
+  if (opcoes.fichaId) chaves.push(`ficha:${opcoes.fichaId.trim().toLowerCase()}`);
+  if (opcoes.ameacaId)
+    chaves.push(`ameaca:${opcoes.ameacaId.trim().toLowerCase()}`);
+  if (opcoes.email) chaves.push(`email:${opcoes.email.trim().toLowerCase()}`);
+
+  for (const ch of chaves) {
+    if (opcoes.imagemUrl) {
+      retratos[ch] = opcoes.imagemUrl;
+    } else {
+      delete retratos[ch];
+    }
+  }
+}
+
+function buscarRetratoSalvo(
+  retratos: Record<string, string> | undefined,
+  opcoes: { fichaId?: string; ameacaId?: string; email?: string }
+): string | undefined {
+  if (!retratos) return undefined;
+  if (opcoes.fichaId) {
+    const v = retratos[`ficha:${opcoes.fichaId.trim().toLowerCase()}`];
+    if (v) return v;
+  }
+  if (opcoes.ameacaId) {
+    const v = retratos[`ameaca:${opcoes.ameacaId.trim().toLowerCase()}`];
+    if (v) return v;
+  }
+  if (opcoes.email) {
+    const v = retratos[`email:${opcoes.email.trim().toLowerCase()}`];
+    if (v) return v;
+  }
+  return undefined;
+}
+
+function ajustarTokensEFogAoTamanho(mapa: MapaTaticoEstado) {
+  mapa.tokens = mapa.tokens.map((t) => {
+    const tam = t.tamanho || 1;
+    const maxCol = Math.max(0, mapa.colunas - tam);
+    const maxLin = Math.max(0, mapa.linhas - tam);
+    return {
+      ...t,
+      x: Math.max(0, Math.min(maxCol, t.x)),
+      y: Math.max(0, Math.min(maxLin, t.y)),
+    };
+  });
+
+  mapa.fogCelulas = mapa.fogCelulas.filter((coord) => {
+    const [cx, cy] = coord.split(",").map(Number);
+    return (
+      !Number.isNaN(cx) &&
+      !Number.isNaN(cy) &&
+      cx >= 0 &&
+      cy >= 0 &&
+      cx < mapa.colunas &&
+      cy < mapa.linhas
+    );
+  });
+}
+
+function salvarNaGaleriaMapas(
+  listaAtual: MapaImagemSalva[] | undefined,
+  imagemUrl: string,
+  nomeSugerido?: string
+): MapaImagemSalva[] {
+  const lista = Array.isArray(listaAtual) ? [...listaAtual] : [];
+  const limpo = imagemUrl.trim();
+  if (!limpo) return lista;
+
+  const semDuplicado = lista.filter((m) => m.imagemUrl !== limpo);
+  const existente = lista.find((m) => m.imagemUrl === limpo);
+  const nomeFinal =
+    nomeSugerido?.trim() ||
+    existente?.nome ||
+    `Mapa ${lista.length + 1}`;
+
+  return [
+    {
+      id: existente?.id || `map-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+      nome: nomeFinal.slice(0, 80),
+      imagemUrl: limpo,
+    },
+    ...semDuplicado,
+  ].slice(0, 5);
 }
 
 function jogadorEstaTravadoNaLista(
@@ -238,12 +423,18 @@ async function buscarUltimaRolagem(
   return candidatos[0];
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await obterUsuarioSessao();
     if (!user) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+
+    const { searchParams } = new URL(request.url);
+    const imgLenParam = Number(searchParams.get("imgLen") || -1);
+    const imgTailParam = searchParams.get("imgTail") || "";
+    const omitirGaleria = searchParams.get("omitirGaleria") === "1";
+    const galeriaCountParam = Number(searchParams.get("galeriaCount") || -1);
 
     const db = getDb();
     let [escudo] = await db
@@ -289,13 +480,33 @@ export async function GET() {
       sigla: gerarSigla(
         f.dados?.identidade?.nome?.trim() || f.nome || "Caçador"
       ),
+      fotoSalva:
+        buscarRetratoSalvo(mapaCompleto.retratosSalvos, {
+          fichaId: f.id,
+          email: emailLower,
+        }) || "",
     }));
 
+    const imagemIgualNoCliente =
+      imgLenParam > 0 &&
+      mapaCompleto.imagemUrl.length === imgLenParam &&
+      mapaCompleto.imagemUrl.slice(-24) === imgTailParam;
+
     if (user.isAdmin) {
+      const galeriaIgualNoCliente =
+        omitirGaleria &&
+        (mapaCompleto.mapasSalvos?.length ?? 0) === galeriaCountParam;
+
       return NextResponse.json({
         visivel: true,
         isAdmin: true,
-        mapa: mapaCompleto,
+        imagemUrlMantida: imagemIgualNoCliente,
+        mapasSalvosMantidos: galeriaIgualNoCliente,
+        mapa: {
+          ...mapaCompleto,
+          imagemUrl: imagemIgualNoCliente ? "" : mapaCompleto.imagemUrl,
+          mapasSalvos: galeriaIgualNoCliente ? [] : mapaCompleto.mapasSalvos,
+        },
         minhasFichas: minhasFichasResumo,
         ultimaRolagem,
       });
@@ -327,9 +538,13 @@ export async function GET() {
     return NextResponse.json({
       visivel: true,
       isAdmin: false,
+      imagemUrlMantida: imagemIgualNoCliente,
       mapa: {
         ...mapaCompleto,
+        imagemUrl: imagemIgualNoCliente ? "" : mapaCompleto.imagemUrl,
         tokens: tokensVisiveisParaJogador,
+        mapasSalvos: [],
+        retratosSalvos: {},
       },
       minhasFichas: minhasFichasResumo,
       ultimaRolagem,
@@ -338,6 +553,211 @@ export async function GET() {
     console.error("Erro em GET /api/mapa:", erro);
     return NextResponse.json(
       { error: "Erro ao carregar mapa tático." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const user = await obterUsuarioSessao();
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    }
+    if (!user.isAdmin) {
+      return NextResponse.json(
+        { error: "Apenas o Mestre pode alterar o mapa." },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+    const parsed = PatchMestreSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error:
+            parsed.error.issues[0]?.message || "Atualização de mapa inválida.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const db = getDb();
+    const acao = parsed.data;
+
+    const resultado = await db.transaction(async (tx) => {
+      const [escudo] = await tx
+        .select()
+        .from(escudoMestre)
+        .where(eq(escudoMestre.id, 1))
+        .limit(1);
+
+      const mapa = normalizarMapa(escudo?.mapaTatico);
+      const retratos = { ...(mapa.retratosSalvos || {}) };
+
+      if (acao.acao === "atualizar_travas") {
+        if (acao.visivelJogadores !== undefined) {
+          mapa.visivelJogadores = acao.visivelJogadores;
+        }
+        if (acao.posicionamentoJogadoresLiberado !== undefined) {
+          mapa.posicionamentoJogadoresLiberado =
+            acao.posicionamentoJogadoresLiberado;
+        }
+        if (acao.movimentoJogadoresLiberado !== undefined) {
+          mapa.movimentoJogadoresLiberado = acao.movimentoJogadoresLiberado;
+        }
+        if (acao.jogadoresTravadosInsercao !== undefined) {
+          mapa.jogadoresTravadosInsercao = acao.jogadoresTravadosInsercao;
+        }
+        if (acao.jogadoresTravadosMovimento !== undefined) {
+          mapa.jogadoresTravadosMovimento = acao.jogadoresTravadosMovimento;
+        }
+      } else if (acao.acao === "atualizar_config") {
+        if (acao.titulo !== undefined) mapa.titulo = acao.titulo;
+        if (acao.temaFundo !== undefined) mapa.temaFundo = acao.temaFundo;
+        if (acao.colunas !== undefined) mapa.colunas = acao.colunas;
+        if (acao.linhas !== undefined) mapa.linhas = acao.linhas;
+        if (acao.opacidadeGrid !== undefined) {
+          mapa.opacidadeGrid = acao.opacidadeGrid;
+        }
+        if (acao.corGrid !== undefined) mapa.corGrid = acao.corGrid;
+        if (acao.ajusteImagem !== undefined) {
+          mapa.ajusteImagem = acao.ajusteImagem;
+        }
+        ajustarTokensEFogAoTamanho(mapa);
+      } else if (acao.acao === "salvar_imagem_mapa") {
+        mapa.imagemUrl = acao.imagemUrl.trim();
+        if (acao.ajusteImagem !== undefined) {
+          mapa.ajusteImagem = acao.ajusteImagem;
+        }
+        if (acao.colunas !== undefined) mapa.colunas = acao.colunas;
+        if (acao.linhas !== undefined) mapa.linhas = acao.linhas;
+        if (mapa.imagemUrl && acao.salvarNaGaleria !== false) {
+          mapa.mapasSalvos = salvarNaGaleriaMapas(
+            mapa.mapasSalvos,
+            mapa.imagemUrl,
+            acao.nomeImagem || mapa.titulo
+          );
+        }
+        ajustarTokensEFogAoTamanho(mapa);
+      } else if (acao.acao === "remover_mapa_salvo") {
+        mapa.mapasSalvos = (mapa.mapasSalvos || []).filter(
+          (m) => m.id !== acao.mapaSalvoId
+        );
+      } else if (acao.acao === "atualizar_fog") {
+        mapa.fogCelulas = acao.fogCelulas;
+        ajustarTokensEFogAoTamanho(mapa);
+      } else if (acao.acao === "mover_token") {
+        const idx = mapa.tokens.findIndex((t) => t.id === acao.tokenId);
+        if (idx !== -1) {
+          const tam = mapa.tokens[idx].tamanho || 1;
+          mapa.tokens[idx] = {
+            ...mapa.tokens[idx],
+            x: Math.max(0, Math.min(mapa.colunas - tam, acao.x)),
+            y: Math.max(0, Math.min(mapa.linhas - tam, acao.y)),
+          };
+        }
+      } else if (acao.acao === "adicionar_token") {
+        const tok = { ...acao.token };
+        if (
+          tok.tipo === "jogador" &&
+          tok.fichaId &&
+          mapa.tokens.some((t) => t.fichaId === tok.fichaId)
+        ) {
+          return { mapa };
+        }
+        if (!tok.imagemUrl) {
+          const fotoSalva = buscarRetratoSalvo(retratos, {
+            fichaId: tok.fichaId,
+            ameacaId: tok.ameacaId,
+            email: tok.ownerEmail,
+          });
+          if (fotoSalva) tok.imagemUrl = fotoSalva;
+        } else {
+          registrarRetratoToken(retratos, {
+            fichaId: tok.fichaId,
+            ameacaId: tok.ameacaId,
+            email: tok.ownerEmail,
+            imagemUrl: tok.imagemUrl,
+          });
+        }
+        const tam = tok.tamanho || 1;
+        tok.x = Math.max(0, Math.min(mapa.colunas - tam, tok.x));
+        tok.y = Math.max(0, Math.min(mapa.linhas - tam, tok.y));
+        mapa.tokens.push(tok);
+      } else if (acao.acao === "editar_token") {
+        const idx = mapa.tokens.findIndex((t) => t.id === acao.tokenId);
+        if (idx !== -1) {
+          const atual = mapa.tokens[idx];
+          const novoTam = acao.tamanho ?? atual.tamanho ?? 1;
+          const novaImg =
+            acao.imagemUrl !== undefined
+              ? acao.imagemUrl || undefined
+              : atual.imagemUrl;
+
+          if (acao.imagemUrl !== undefined) {
+            registrarRetratoToken(retratos, {
+              fichaId: atual.fichaId,
+              ameacaId: atual.ameacaId,
+              email: atual.ownerEmail,
+              imagemUrl: acao.imagemUrl,
+            });
+          }
+
+          mapa.tokens[idx] = {
+            ...atual,
+            ...(acao.oculto !== undefined ? { oculto: acao.oculto } : {}),
+            ...(acao.cor !== undefined ? { cor: acao.cor } : {}),
+            ...(acao.nome !== undefined
+              ? { nome: acao.nome, sigla: gerarSigla(acao.nome) }
+              : {}),
+            tamanho: novoTam,
+            imagemUrl: novaImg,
+            x: Math.max(0, Math.min(mapa.colunas - novoTam, atual.x)),
+            y: Math.max(0, Math.min(mapa.linhas - novoTam, atual.y)),
+          };
+        }
+      } else if (acao.acao === "remover_token") {
+        mapa.tokens = mapa.tokens.filter((t) => t.id !== acao.tokenId);
+      } else if (acao.acao === "limpar_tokens") {
+        mapa.tokens = [];
+      }
+
+      mapa.retratosSalvos = retratos;
+      mapa.versao = (mapa.versao || 1) + 1;
+      mapa.updatedAt = new Date().toISOString();
+
+      await tx
+        .insert(escudoMestre)
+        .values({
+          id: 1,
+          mestreEmail: obterEmailAdmin(),
+          mapaTatico: mapa,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: escudoMestre.id,
+          set: {
+            mapaTatico: mapa,
+            updatedAt: new Date(),
+          },
+        });
+
+      return { mapa };
+    });
+
+    return NextResponse.json({
+      ok: true,
+      versao: resultado.mapa.versao,
+      mapasSalvos: resultado.mapa.mapasSalvos,
+      retratosSalvos: resultado.mapa.retratosSalvos,
+      tokens: resultado.mapa.tokens,
+    });
+  } catch (erro) {
+    console.error("Erro em PATCH /api/mapa:", erro);
+    return NextResponse.json(
+      { error: "Erro ao atualizar mapa tático." },
       { status: 500 }
     );
   }
@@ -368,29 +788,57 @@ export async function PUT(request: Request) {
       );
     }
 
-    const mapaParaSalvar: MapaTaticoEstado = {
-      ...parsed.data,
-      updatedAt: new Date().toISOString(),
-    };
-
     const db = getDb();
-    await db
-      .insert(escudoMestre)
-      .values({
-        id: 1,
-        mestreEmail: obterEmailAdmin(),
-        mapaTatico: mapaParaSalvar,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: escudoMestre.id,
-        set: {
-          mapaTatico: mapaParaSalvar,
-          updatedAt: new Date(),
-        },
-      });
+    const mapaSalvo = await db.transaction(async (tx) => {
+      const [atualRow] = await tx
+        .select()
+        .from(escudoMestre)
+        .where(eq(escudoMestre.id, 1))
+        .limit(1);
 
-    return NextResponse.json({ mapa: mapaParaSalvar });
+      const anterior = normalizarMapa(atualRow?.mapaTatico);
+      const novo: MapaTaticoEstado = {
+        ...parsed.data,
+        versao: (anterior.versao || 1) + 1,
+        mapasSalvos: parsed.data.mapasSalvos ?? anterior.mapasSalvos ?? [],
+        retratosSalvos:
+          parsed.data.retratosSalvos ?? anterior.retratosSalvos ?? {},
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (novo.imagemUrl) {
+        novo.mapasSalvos = salvarNaGaleriaMapas(
+          novo.mapasSalvos,
+          novo.imagemUrl,
+          novo.titulo
+        );
+      }
+      ajustarTokensEFogAoTamanho(novo);
+
+      await tx
+        .insert(escudoMestre)
+        .values({
+          id: 1,
+          mestreEmail: obterEmailAdmin(),
+          mapaTatico: novo,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: escudoMestre.id,
+          set: {
+            mapaTatico: novo,
+            updatedAt: new Date(),
+          },
+        });
+
+      return novo;
+    });
+
+    return NextResponse.json({
+      ok: true,
+      versao: mapaSalvo.versao,
+      mapa: mapaSalvo,
+    });
   } catch (erro) {
     console.error("Erro em PUT /api/mapa:", erro);
     return NextResponse.json(
@@ -427,7 +875,13 @@ export async function POST(request: Request) {
         .limit(1);
 
       const mapa = normalizarMapa(escudo?.mapaTatico);
-      if (!user.isAdmin && !mapa.visivelJogadores) {
+      const retratos = { ...(mapa.retratosSalvos || {}) };
+
+      if (
+        !user.isAdmin &&
+        !mapa.visivelJogadores &&
+        parsed.data.acao !== "atualizar_aparencia_meu_token"
+      ) {
         return { erro: "O mapa não está ativo no momento.", status: 403 };
       }
 
@@ -516,15 +970,29 @@ export async function POST(request: Request) {
         const tokenExistente =
           existenteIdx !== -1 ? mapa.tokens[existenteIdx] : undefined;
 
+        if (acao.imagemUrl !== undefined) {
+          registrarRetratoToken(retratos, {
+            fichaId: ficha.id,
+            email: ficha.ownerEmail,
+            imagemUrl: acao.imagemUrl,
+          });
+        }
+
+        const imagemFinal =
+          acao.imagemUrl !== undefined
+            ? acao.imagemUrl || undefined
+            : tokenExistente?.imagemUrl ||
+              buscarRetratoSalvo(retratos, {
+                fichaId: ficha.id,
+                email: ficha.ownerEmail,
+              });
+
         const novoToken: TokenMapa = {
           id: tokenExistente?.id || `tok-${ficha.id.slice(0, 8)}`,
           nome: nomePersonagem,
           cor: acao.cor || tokenExistente?.cor || "#f08b21",
           sigla: gerarSigla(nomePersonagem),
-          imagemUrl:
-            acao.imagemUrl !== undefined
-              ? acao.imagemUrl
-              : tokenExistente?.imagemUrl,
+          imagemUrl: imagemFinal,
           x,
           y,
           tamanho: 1,
@@ -583,7 +1051,7 @@ export async function POST(request: Request) {
       } else if (acao.acao === "recolher_meu_token") {
         const idx = mapa.tokens.findIndex((t) => t.id === acao.tokenId);
         if (idx === -1) {
-          return { ok: true };
+          return { ok: true, versao: mapa.versao };
         }
         const tokenAlvo = mapa.tokens[idx];
         if (!(await verificarDonoDoToken(tokenAlvo))) {
@@ -609,33 +1077,87 @@ export async function POST(request: Request) {
 
         mapa.tokens.splice(idx, 1);
       } else if (acao.acao === "atualizar_aparencia_meu_token") {
-        const idx = mapa.tokens.findIndex((t) => t.id === acao.tokenId);
-        if (idx === -1) {
-          return { erro: "Token não encontrado no mapa.", status: 404 };
-        }
-        const tokenAlvo = mapa.tokens[idx];
-        if (!(await verificarDonoDoToken(tokenAlvo))) {
-          return {
-            erro: "Sem permissão para editar este token.",
-            status: 403,
-          };
+        let fichaValidadaId: string | undefined;
+
+        if (acao.fichaId) {
+          const [ficha] = await tx
+            .select({
+              id: fichas.id,
+              userId: fichas.userId,
+              ownerEmail: fichas.ownerEmail,
+            })
+            .from(fichas)
+            .where(eq(fichas.id, acao.fichaId))
+            .limit(1);
+
+          if (
+            ficha &&
+            (user.isAdmin ||
+              ficha.userId === user.id ||
+              ficha.ownerEmail.trim().toLowerCase() === emailLower)
+          ) {
+            fichaValidadaId = ficha.id;
+          }
         }
 
-        mapa.tokens[idx] = {
-          ...tokenAlvo,
-          cor: acao.cor !== undefined ? acao.cor : tokenAlvo.cor,
-          imagemUrl:
-            acao.imagemUrl !== undefined ? acao.imagemUrl : tokenAlvo.imagemUrl,
-        };
+        if (acao.imagemUrl !== undefined) {
+          registrarRetratoToken(retratos, {
+            fichaId: fichaValidadaId,
+            email: emailLower,
+            imagemUrl: acao.imagemUrl,
+          });
+        }
+
+        if (acao.tokenId) {
+          const idx = mapa.tokens.findIndex((t) => t.id === acao.tokenId);
+          if (idx !== -1) {
+            const tokenAlvo = mapa.tokens[idx];
+            if (!(await verificarDonoDoToken(tokenAlvo))) {
+              return {
+                erro: "Sem permissão para editar este token.",
+                status: 403,
+              };
+            }
+            if (acao.imagemUrl !== undefined && tokenAlvo.fichaId) {
+              registrarRetratoToken(retratos, {
+                fichaId: tokenAlvo.fichaId,
+                email: tokenAlvo.ownerEmail || emailLower,
+                imagemUrl: acao.imagemUrl,
+              });
+            }
+            mapa.tokens[idx] = {
+              ...tokenAlvo,
+              cor: acao.cor !== undefined ? acao.cor : tokenAlvo.cor,
+              imagemUrl:
+                acao.imagemUrl !== undefined
+                  ? acao.imagemUrl || undefined
+                  : tokenAlvo.imagemUrl,
+            };
+          }
+        }
       }
 
+      mapa.retratosSalvos = retratos;
+      mapa.versao = (mapa.versao || 1) + 1;
       mapa.updatedAt = new Date().toISOString();
-      await tx
-        .update(escudoMestre)
-        .set({ mapaTatico: mapa, updatedAt: new Date() })
-        .where(eq(escudoMestre.id, 1));
 
-      return { ok: true, mapa };
+      await tx
+        .insert(escudoMestre)
+        .values({
+          id: 1,
+          mestreEmail: obterEmailAdmin(),
+          mapaTatico: mapa,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: escudoMestre.id,
+          set: {
+            mapaTatico: mapa,
+            updatedAt: new Date(),
+          },
+        });
+
+      return { ok: true, versao: mapa.versao };
     });
 
     if ("erro" in resultado) {
@@ -645,7 +1167,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, versao: resultado.versao });
   } catch (erro) {
     console.error("Erro em POST /api/mapa:", erro);
     return NextResponse.json(

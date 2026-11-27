@@ -276,6 +276,13 @@ export function GridTaticoCombate({
   const [travasIndividuaisAberta, setTravasIndividuaisAberta] = useState(false);
   const [processandoUpload, setProcessandoUpload] = useState(false);
 
+  // No celular, inicia o painel de configurações recolhido para focar no mapa
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 640) {
+      setConfigAberta(false);
+    }
+  }, []);
+
   // Rascunhos locais desacoplados do polling (para digitar sem pular ou apagar sozinho!)
   const [tituloDraft, setTituloDraft] = useState("Cena de Conflito");
   const [urlMapaDraft, setUrlMapaDraft] = useState("");
@@ -1206,7 +1213,8 @@ export function GridTaticoCombate({
       return;
     }
 
-    if (e.button === 1 || ferramenta === "pan") {
+    // Arrastar área vazia no modo Mover ou Câmera move o mapa (essencial no toque mobile!)
+    if (e.button === 1 || ferramenta === "pan" || ferramenta === "mover") {
       const vp = viewportRef.current;
       if (!vp) return;
       panStateRef.current = {

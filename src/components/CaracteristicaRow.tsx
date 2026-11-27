@@ -72,18 +72,18 @@ export function CaracteristicaRow({
           })}
         </div>
 
-        {/* Controles compactos - / valor / + */}
+        {/* Controles compactos - / valor / + (alvos maiores para toque no celular) */}
         <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-0.5">
           <button
             type="button"
             disabled={disabled || valor <= min}
             onClick={decrementar}
             aria-label={`Diminuir ${nome}`}
-            className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            className="w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center rounded text-zinc-300 sm:text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 active:bg-zinc-700 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
-            <Minus className="w-3.5 h-3.5" />
+            <Minus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </button>
-          <span className="w-5 text-center font-display text-base font-semibold text-zinc-100 tabular-nums">
+          <span className="w-6 sm:w-5 text-center font-display text-base font-semibold text-zinc-100 tabular-nums">
             {valor}
           </span>
           <button
@@ -91,9 +91,9 @@ export function CaracteristicaRow({
             disabled={disabled || valor >= max}
             onClick={incrementar}
             aria-label={`Aumentar ${nome}`}
-            className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            className="w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center rounded text-zinc-300 sm:text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 active:bg-zinc-700 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </button>
         </div>
       </div>

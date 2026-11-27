@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Award, Dices, Flame } from "lucide-react";
+import { Award, Dices, Flame, History, Map as MapIcon } from "lucide-react";
 import { GridTaticoCombate } from "@/components/GridTaticoCombate";
 import {
   HistoricoCentralizado,
@@ -71,6 +71,9 @@ export function AbaRolagem({
     useState<EventoAnimacaoRolagem | null>(null);
   const [resolvendoPerigoId, setResolvendoPerigoId] = useState<string | null>(
     null
+  );
+  const [abaMobile, setAbaMobile] = useState<"rolar" | "grid" | "historico">(
+    "rolar"
   );
 
   const [publicasMestre, setPublicasMestre] = useState<RolagemMestreFeedItem[]>(
@@ -339,8 +342,8 @@ export function AbaRolagem({
     "w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-[#f08b21] transition";
 
   return (
-    <section className="bg-[#141416] border border-zinc-800/90 rounded-xl p-5 sm:p-6 space-y-6">
-      <div>
+    <section className="bg-[#141416] border border-zinc-800/90 rounded-xl p-3.5 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="hidden sm:block">
         <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-zinc-100">
           Rolagem de Dados &amp; Histórico
         </h2>
@@ -350,8 +353,52 @@ export function AbaRolagem({
         </p>
       </div>
 
+      {/* SELETOR DE VISÃO EXCLUSIVO DE CELULAR (< sm): 1 FERRAMENTA POR VEZ */}
+      <div className="sm:hidden grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-zinc-950 border border-zinc-800">
+        <button
+          type="button"
+          onClick={() => setAbaMobile("rolar")}
+          className={`inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
+            abaMobile === "rolar"
+              ? "bg-[#f08b21] text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          <Dices className="w-3.5 h-3.5" />
+          Rolar
+        </button>
+        <button
+          type="button"
+          onClick={() => setAbaMobile("historico")}
+          className={`inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
+            abaMobile === "historico"
+              ? "bg-[#f08b21] text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          <History className="w-3.5 h-3.5" />
+          Histórico
+        </button>
+        <button
+          type="button"
+          onClick={() => setAbaMobile("grid")}
+          className={`inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
+            abaMobile === "grid"
+              ? "bg-[#f08b21] text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          <MapIcon className="w-3.5 h-3.5" />
+          Grid
+        </button>
+      </div>
+
       {/* Montador de parada */}
-      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4">
+      <div
+        className={`${
+          abaMobile === "rolar" ? "block" : "hidden sm:block"
+        } bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 sm:p-5 space-y-4`}
+      >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">
@@ -544,11 +591,11 @@ export function AbaRolagem({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2.5 sm:gap-3">
           <button
             type="button"
             onClick={() => handleRolar(false)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 font-semibold text-xs uppercase tracking-wider transition cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 font-semibold text-xs uppercase tracking-wider transition cursor-pointer"
           >
             <Dices className="w-4 h-4" />
             Rolar dados
@@ -557,45 +604,69 @@ export function AbaRolagem({
           <button
             type="button"
             onClick={() => handleRolar(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-600/50 font-semibold text-xs uppercase tracking-wider transition cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-600/50 font-semibold text-xs uppercase tracking-wider transition cursor-pointer"
           >
             <Flame className="w-4 h-4" />
             Rolar com Ímpeto
           </button>
         </div>
+
+        {/* Atalho rápido no celular para ir Re-rolar / ver detalhes da última jogada */}
+        {ficha.rolagens.length > 0 && (
+          <div className="sm:hidden flex items-center justify-between gap-2 p-2.5 rounded-lg bg-zinc-950/90 border border-zinc-800 text-xs">
+            <span className="text-zinc-300 truncate">
+              Última:{" "}
+              <strong className="text-[#f08b21]">
+                {ficha.rolagens[0].sucessos} suc.
+              </strong>{" "}
+              ({ficha.rolagens[0].descricao})
+            </span>
+            <button
+              type="button"
+              onClick={() => setAbaMobile("historico")}
+              className="px-2.5 py-1 rounded bg-zinc-900 text-[#f08b21] border border-[#f08b21]/40 font-semibold shrink-0 cursor-pointer"
+            >
+              Re-rolar / Ver
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Histórico Centralizado Único */}
-      <HistoricoCentralizado
-        estilo={isAdmin ? "mestre" : "jogador"}
-        userEmail={userEmail}
-        fichaAtualId={fichaAtualId}
-        rolagensLocaisFicha={ficha.rolagens}
-        personagemLocal={ficha.identidade.nome || "Ficha sem nome"}
-        jogadorLocal={ficha.identidade.jogador || ""}
-        publicasMestre={publicasMestre}
-        privadasMestre={privadasMestre}
-        jogadores={publicasJogadores}
-        carregando={carregandoFeed}
-        aoVivo={autenticado}
-        resolvendoPerigoId={resolvendoPerigoId}
-        onAtualizar={() => carregarFeedCentralizado(false)}
-        onResolverImpeto={handleResolverImpeto}
-        onMarcarAflicao={handleMarcarAflicao}
-        onAumentarPerigo={handleAumentarPerigo}
-        onRerolarComVontade={handleRerolarComVontade}
-        onForcarComDesespero={handleForcarComDesespero}
-      />
+      <div className={abaMobile === "historico" ? "block" : "hidden sm:block"}>
+        <HistoricoCentralizado
+          estilo={isAdmin ? "mestre" : "jogador"}
+          userEmail={userEmail}
+          fichaAtualId={fichaAtualId}
+          rolagensLocaisFicha={ficha.rolagens}
+          personagemLocal={ficha.identidade.nome || "Ficha sem nome"}
+          jogadorLocal={ficha.identidade.jogador || ""}
+          publicasMestre={publicasMestre}
+          privadasMestre={privadasMestre}
+          jogadores={publicasJogadores}
+          carregando={carregandoFeed}
+          aoVivo={autenticado}
+          resolvendoPerigoId={resolvendoPerigoId}
+          onAtualizar={() => carregarFeedCentralizado(false)}
+          onResolverImpeto={handleResolverImpeto}
+          onMarcarAflicao={handleMarcarAflicao}
+          onAumentarPerigo={handleAumentarPerigo}
+          onRerolarComVontade={handleRerolarComVontade}
+          onForcarComDesespero={handleForcarComDesespero}
+        />
+      </div>
 
       {/* Grid Tático de Combate no final da aba Rolagens e Grid */}
-      <GridTaticoCombate
-        modo="jogador"
-        autenticado={autenticado}
-        fichaAtualId={fichaAtualId}
-        nomePersonagemAtual={ficha.identidade.nome || "Caçador"}
-        userEmail={userEmail}
-        onNotify={onNotify}
-      />
+      <div className={abaMobile === "grid" ? "block" : "hidden sm:block"}>
+        <GridTaticoCombate
+          modo="jogador"
+          autenticado={autenticado}
+          fichaAtualId={fichaAtualId}
+          nomePersonagemAtual={ficha.identidade.nome || "Caçador"}
+          userEmail={userEmail}
+          onNotify={onNotify}
+        />
+      </div>
 
       <ModalSimulacaoRolagem
         evento={eventoAnimacao}

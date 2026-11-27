@@ -2,20 +2,29 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BookOpen,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Cloud,
   CloudOff,
   Crosshair,
+  Dices,
   Download,
   FileJson,
+  FileText,
   FolderOpen,
+  HeartPulse,
   Home,
+  ListOrdered,
   Loader2,
   Lock,
   LogOut,
+  Menu,
   PlusCircle,
   Save,
   Shield,
+  Sparkles,
   Upload,
   X,
 } from "lucide-react";
@@ -152,6 +161,7 @@ export function CacadorApp() {
   });
 
   const [modalFichasAberto, setModalFichasAberto] = useState(false);
+  const [menuMobileAberto, setMenuMobileAberto] = useState(false);
   const [minhasFichas, setMinhasFichas] = useState<FichaResumoOnline[]>([]);
   const [carregandoFichas, setCarregandoFichas] = useState(false);
 
@@ -756,26 +766,27 @@ export function CacadorApp() {
         </div>
       )}
 
-      {/* Header Minimalista e Responsivo */}
-      <header className="sticky top-0 z-30 bg-[#09090b]/90 backdrop-blur-md border-b border-zinc-800/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+      {/* Header Minimalista e Responsivo (Compacto com Gaveta no Celular, Completo em Tablet/PC) */}
+      <header className="sticky top-0 z-30 bg-[#09090b]/95 backdrop-blur-md border-b border-zinc-800/80">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               type="button"
               onClick={() => {
+                setMenuMobileAberto(false);
                 setAdminEditandoFicha(false);
                 setModoTela("menu");
               }}
-              className="flex items-center gap-2.5 text-left group cursor-pointer"
+              className="flex items-center gap-2 sm:gap-2.5 text-left group cursor-pointer min-w-0"
             >
-              <div className="w-8 h-8 rounded-lg bg-[#f08b21]/15 border border-[#f08b21]/40 flex items-center justify-center text-[#f08b21] group-hover:bg-[#f08b21] group-hover:text-zinc-950 transition">
+              <div className="w-8 h-8 rounded-lg bg-[#f08b21]/15 border border-[#f08b21]/40 flex items-center justify-center text-[#f08b21] group-hover:bg-[#f08b21] group-hover:text-zinc-950 transition shrink-0">
                 <Crosshair className="w-4 h-4" />
               </div>
-              <div>
-                <span className="block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+              <div className="min-w-0">
+                <span className="hidden sm:block text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
                   Caçador: A Revanche · 5ª Ed.
                 </span>
-                <span className="block font-display text-lg font-bold uppercase tracking-wide text-zinc-100 leading-none">
+                <span className="block font-display text-base sm:text-lg font-bold uppercase tracking-wide text-zinc-100 leading-tight truncate max-w-[165px] sm:max-w-none">
                   {modoTela === "menu"
                     ? "Fichas Online"
                     : modoTela === "admin"
@@ -793,115 +804,294 @@ export function CacadorApp() {
             )}
           </div>
 
-            {modoTela !== "menu" && (
-            <div className="flex flex-wrap items-center gap-2">
-              {modoTela !== "admin" && (
-                <>
-                  {/* Indicador de Auto-Save na Nuvem */}
-                  {user && statusNuvem !== "idle" && (
-                    <button
-                      type="button"
-                      onClick={salvarFichaOnlineManual}
-                      title="Status do salvamento automático (clique para salvar agora)"
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition cursor-pointer ${
-                        statusNuvem === "erro"
-                          ? "bg-red-950/70 border-red-700/70 text-red-200"
-                          : statusNuvem === "salvando" ||
-                              statusNuvem === "pendente"
-                            ? "bg-zinc-900 border-zinc-800 text-amber-300"
-                            : "bg-zinc-950 border-zinc-800 text-emerald-400"
-                      }`}
-                    >
-                      {statusNuvem === "salvando" ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span className="hidden sm:inline">Salvando...</span>
-                        </>
-                      ) : statusNuvem === "pendente" ? (
-                        <>
-                          <Cloud className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Auto-save...</span>
-                        </>
-                      ) : statusNuvem === "erro" ? (
-                        <>
-                          <CloudOff className="w-3.5 h-3.5" />
-                          <span>Tentar salvar</span>
-                        </>
-                      ) : (
-                        <>
-                          <Cloud className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Salvo</span>
-                        </>
-                      )}
-                    </button>
-                  )}
+          {modoTela !== "menu" && (
+            <>
+              {/* AÇÕES COMPACTAS EXCLUSIVAS DE CELULAR (< md) */}
+              <div className="flex md:hidden items-center gap-1.5 shrink-0">
+                {modoTela !== "admin" && user && statusNuvem !== "idle" && (
+                  <button
+                    type="button"
+                    onClick={salvarFichaOnlineManual}
+                    title="Status do salvamento na nuvem"
+                    className={`p-2 rounded-lg border transition cursor-pointer ${
+                      statusNuvem === "erro"
+                        ? "bg-red-950/70 border-red-700/70 text-red-200"
+                        : statusNuvem === "salvando" ||
+                            statusNuvem === "pendente"
+                          ? "bg-zinc-900 border-zinc-800 text-amber-300"
+                          : "bg-zinc-950 border-zinc-800 text-emerald-400"
+                    }`}
+                  >
+                    {statusNuvem === "salvando" ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : statusNuvem === "erro" ? (
+                      <CloudOff className="w-4 h-4" />
+                    ) : (
+                      <Cloud className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
 
+                {modoTela !== "admin" && (
                   <button
                     type="button"
                     disabled={!user || salvandoOnline}
                     onClick={salvarFichaOnlineManual}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 font-semibold text-xs uppercase tracking-wider disabled:opacity-50 transition cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#f08b21] text-zinc-950 font-bold text-xs uppercase tracking-wider disabled:opacity-50 cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    {salvandoOnline ? "Salvando..." : "Salvar"}
+                    Salvar
                   </button>
+                )}
 
-                  {modoTela === "criacao" && (
+                {modoTela === "criacao" && (
+                  <button
+                    type="button"
+                    onClick={finalizarFicha}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-zinc-950 font-bold text-xs uppercase tracking-wider cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Fim
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setMenuMobileAberto((v) => !v)}
+                  aria-label="Abrir menu de ações"
+                  className={`p-2 rounded-lg border transition cursor-pointer ${
+                    menuMobileAberto
+                      ? "bg-[#f08b21] text-zinc-950 border-[#f08b21]"
+                      : "bg-zinc-900 text-zinc-200 border-zinc-800"
+                  }`}
+                >
+                  {menuMobileAberto ? (
+                    <X className="w-4 h-4" />
+                  ) : (
+                    <Menu className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              {/* BARRA COMPLETA DE TABLET & PC (md+) — INALTERADA */}
+              <div className="hidden md:flex flex-wrap items-center gap-2">
+                {modoTela !== "admin" && (
+                  <>
+                    {user && statusNuvem !== "idle" && (
+                      <button
+                        type="button"
+                        onClick={salvarFichaOnlineManual}
+                        title="Status do salvamento automático (clique para salvar agora)"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition cursor-pointer ${
+                          statusNuvem === "erro"
+                            ? "bg-red-950/70 border-red-700/70 text-red-200"
+                            : statusNuvem === "salvando" ||
+                                statusNuvem === "pendente"
+                              ? "bg-zinc-900 border-zinc-800 text-amber-300"
+                              : "bg-zinc-950 border-zinc-800 text-emerald-400"
+                        }`}
+                      >
+                        {statusNuvem === "salvando" ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Salvando...</span>
+                          </>
+                        ) : statusNuvem === "pendente" ? (
+                          <>
+                            <Cloud className="w-3.5 h-3.5" />
+                            <span>Auto-save...</span>
+                          </>
+                        ) : statusNuvem === "erro" ? (
+                          <>
+                            <CloudOff className="w-3.5 h-3.5" />
+                            <span>Tentar salvar</span>
+                          </>
+                        ) : (
+                          <>
+                            <Cloud className="w-3.5 h-3.5" />
+                            <span>Salvo</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={finalizarFicha}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-semibold text-xs uppercase tracking-wider transition cursor-pointer"
+                      disabled={!user || salvandoOnline}
+                      onClick={salvarFichaOnlineManual}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f08b21] hover:bg-[#ff9c33] text-zinc-950 font-semibold text-xs uppercase tracking-wider disabled:opacity-50 transition cursor-pointer"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Finalizar
+                      <Save className="w-3.5 h-3.5" />
+                      {salvandoOnline ? "Salvando..." : "Salvar"}
                     </button>
-                  )}
 
+                    {modoTela === "criacao" && (
+                      <button
+                        type="button"
+                        onClick={finalizarFicha}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-semibold text-xs uppercase tracking-wider transition cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Finalizar
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={iniciarNovaFicha}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition cursor-pointer"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>Nova</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={abrirModalMinhasFichas}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition cursor-pointer"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                      <span>Fichas</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={exportarTxt}
+                      title="Exportar ficha em .TXT"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs transition cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      TXT
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={exportarJson}
+                      title="Exportar ficha em .JSON"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs transition cursor-pointer"
+                    >
+                      <FileJson className="w-3.5 h-3.5" />
+                      JSON
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => inputImportRef.current?.click()}
+                      title="Importar ficha .JSON"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs transition cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+
+                {user?.isAdmin && modoTela !== "admin" && (
                   <button
                     type="button"
-                    onClick={iniciarNovaFicha}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition cursor-pointer"
+                    onClick={() => {
+                      descarregarAutoSavePendente(ficha);
+                      setAdminEditandoFicha(false);
+                      setModoTela("admin");
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-[#f08b21] border border-[#f08b21]/40 text-xs font-semibold transition cursor-pointer"
                   >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Nova</span>
+                    <Shield className="w-3.5 h-3.5" />
+                    Escudo
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    descarregarAutoSavePendente(ficha);
+                    setAdminEditandoFicha(false);
+                    setModoTela("menu");
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs transition cursor-pointer"
+                >
+                  <Home className="w-3.5 h-3.5" />
+                  Menu
+                </button>
+
+                {user && (
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    title={`Conectado: ${user.email} — Clique para sair`}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800 text-xs transition cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* GAVETA DE AÇÕES RÁPIDAS MOBILE (< md) */}
+        {modoTela !== "menu" && menuMobileAberto && (
+          <div className="md:hidden border-t border-zinc-800 bg-[#0d0d10] px-3 py-3 space-y-2.5 shadow-2xl">
+            <div className="grid grid-cols-2 gap-2">
+              {modoTela !== "admin" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuMobileAberto(false);
+                      abrirModalMinhasFichas();
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-900 text-zinc-100 border border-zinc-800 text-xs font-medium cursor-pointer"
+                  >
+                    <FolderOpen className="w-4 h-4 text-[#f08b21]" />
+                    Minhas Fichas
                   </button>
 
                   <button
                     type="button"
-                    onClick={abrirModalMinhasFichas}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition cursor-pointer"
+                    onClick={() => {
+                      setMenuMobileAberto(false);
+                      iniciarNovaFicha();
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-900 text-zinc-100 border border-zinc-800 text-xs font-medium cursor-pointer"
                   >
-                    <FolderOpen className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Fichas</span>
+                    <PlusCircle className="w-4 h-4 text-emerald-400" />
+                    Nova Ficha
                   </button>
 
                   <button
                     type="button"
-                    onClick={exportarTxt}
-                    title="Exportar ficha em .TXT"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs transition cursor-pointer"
+                    onClick={() => {
+                      setMenuMobileAberto(false);
+                      exportarTxt();
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-zinc-300 border border-zinc-800 text-xs cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    TXT
+                    Exportar .TXT
                   </button>
 
                   <button
                     type="button"
-                    onClick={exportarJson}
-                    title="Exportar ficha em .JSON"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs transition cursor-pointer"
+                    onClick={() => {
+                      setMenuMobileAberto(false);
+                      exportarJson();
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-zinc-300 border border-zinc-800 text-xs cursor-pointer"
                   >
                     <FileJson className="w-3.5 h-3.5" />
-                    JSON
+                    Exportar .JSON
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => inputImportRef.current?.click()}
-                    title="Importar ficha .JSON"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs transition cursor-pointer"
+                    onClick={() => {
+                      setMenuMobileAberto(false);
+                      inputImportRef.current?.click();
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-zinc-300 border border-zinc-800 text-xs cursor-pointer"
                   >
                     <Upload className="w-3.5 h-3.5" />
+                    Importar .JSON
                   </button>
                 </>
               )}
@@ -910,43 +1100,48 @@ export function CacadorApp() {
                 <button
                   type="button"
                   onClick={() => {
+                    setMenuMobileAberto(false);
                     descarregarAutoSavePendente(ficha);
                     setAdminEditandoFicha(false);
                     setModoTela("admin");
                   }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-[#f08b21] border border-[#f08b21]/40 text-xs font-semibold transition cursor-pointer"
+                  className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-[#f08b21] border border-[#f08b21]/40 text-xs font-semibold cursor-pointer"
                 >
                   <Shield className="w-3.5 h-3.5" />
-                  Escudo
+                  Escudo do Mestre
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={() => {
+                  setMenuMobileAberto(false);
                   descarregarAutoSavePendente(ficha);
                   setAdminEditandoFicha(false);
                   setModoTela("menu");
                 }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs transition cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-zinc-200 border border-zinc-800 text-xs cursor-pointer"
               >
                 <Home className="w-3.5 h-3.5" />
-                Menu
+                Menu Inicial
               </button>
 
               {user && (
                 <button
                   type="button"
-                  onClick={handleLogout}
-                  title={`Conectado: ${user.email} — Clique para sair`}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800 text-xs transition cursor-pointer"
+                  onClick={() => {
+                    setMenuMobileAberto(false);
+                    void handleLogout();
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-950 text-red-300 border border-zinc-800 text-xs cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
+                  Sair da Conta
                 </button>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </header>
 
       {/* Conteúdo Principal */}
@@ -968,7 +1163,7 @@ export function CacadorApp() {
           />
         </div>
       ) : modoTela === "admin" ? (
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
           <EscudoMestre
             userEmail={user?.email || ""}
             onEditarFichaAdmin={(id) =>
@@ -978,9 +1173,57 @@ export function CacadorApp() {
           />
         </main>
       ) : (
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-5">
-          {/* Painel de Status Resumido */}
-          <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <main
+          className={`flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3.5 sm:py-6 space-y-3.5 sm:space-y-5 ${
+            modoTela === "gerenciar" && !adminEditandoFicha ? "pb-20 sm:pb-6" : ""
+          }`}
+        >
+          {/* FAIXA HUD ULTRA-COMPACTA DE 1 LINHA NO CELULAR (< sm) */}
+          <section className="sm:hidden grid grid-cols-5 gap-1.5 bg-[#141416] border border-zinc-800/90 rounded-xl p-2 text-center">
+            <div className="rounded-lg bg-zinc-950/70 py-1.5 px-1">
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                Vit
+              </span>
+              <strong className="font-display text-base font-bold text-zinc-100 leading-tight">
+                {totalCaixasVitalidade(ficha)}
+              </strong>
+            </div>
+            <div className="rounded-lg bg-zinc-950/70 py-1.5 px-1">
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                Von
+              </span>
+              <strong className="font-display text-base font-bold text-zinc-100 leading-tight">
+                {totalCaixasVontade(ficha)}
+              </strong>
+            </div>
+            <div className="rounded-lg bg-zinc-950/70 py-1.5 px-1">
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                XP
+              </span>
+              <strong className="font-display text-base font-bold text-[#f08b21] leading-tight">
+                {xpDisponivel(ficha)}
+              </strong>
+            </div>
+            <div className="rounded-lg bg-zinc-950/70 py-1.5 px-1">
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                Desesp.
+              </span>
+              <strong className="font-display text-base font-bold text-amber-300 leading-tight">
+                {subgrupoCronica.desespero}
+              </strong>
+            </div>
+            <div className="rounded-lg bg-zinc-950/70 py-1.5 px-1">
+              <span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                Perigo
+              </span>
+              <strong className="font-display text-base font-bold text-red-400 leading-tight">
+                {subgrupoCronica.perigo}
+              </strong>
+            </div>
+          </section>
+
+          {/* PAINEL DE 6 CARTÕES EM TABLET & PC (sm+) — INALTERADO */}
+          <section className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="bg-[#141416] border border-zinc-800/90 rounded-xl px-4 py-3">
               <span className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                 Estado
@@ -1031,10 +1274,58 @@ export function CacadorApp() {
             </div>
           </section>
 
-          {/* Navegação por Abas */}
+          {/* SELETOR DE ETAPAS COMPACTO NO CELULAR PARA CRIAÇÃO / EDIÇÃO MESTRE (< sm) */}
+          {(modoTela !== "gerenciar" || adminEditandoFicha) && (
+            <div className="sm:hidden flex items-center gap-1.5 bg-[#141416] border border-zinc-800/90 rounded-xl p-1.5">
+              <button
+                type="button"
+                disabled={etapasVisiveis.indexOf(etapaAtiva) <= 0}
+                onClick={() => {
+                  const idx = etapasVisiveis.indexOf(etapaAtiva);
+                  if (idx > 0) setEtapaAtiva(etapasVisiveis[idx - 1]);
+                }}
+                className="p-2 rounded-lg bg-zinc-900 text-zinc-200 border border-zinc-800 disabled:opacity-35 cursor-pointer"
+                aria-label="Etapa anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <select
+                value={etapaAtiva}
+                onChange={(e) => setEtapaAtiva(e.target.value as EtapaId)}
+                className="flex-1 px-2.5 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs font-semibold uppercase tracking-wider text-[#f08b21] focus:outline-none"
+              >
+                {etapasVisiveis.map((aba, idx) => (
+                  <option key={aba} value={aba}>
+                    {idx + 1}/{etapasVisiveis.length} · {ABAS_LABELS[aba]}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                disabled={
+                  etapasVisiveis.indexOf(etapaAtiva) >=
+                  etapasVisiveis.length - 1
+                }
+                onClick={() => {
+                  const idx = etapasVisiveis.indexOf(etapaAtiva);
+                  if (idx < etapasVisiveis.length - 1) {
+                    setEtapaAtiva(etapasVisiveis[idx + 1]);
+                  }
+                }}
+                className="p-2 rounded-lg bg-zinc-900 text-zinc-200 border border-zinc-800 disabled:opacity-35 cursor-pointer"
+                aria-label="Próxima etapa"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Navegação por Abas Tradicional em Tablet & PC (sm+) */}
           <nav
             aria-label="Etapas da ficha"
-            className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-zinc-800"
+            className="hidden sm:flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-zinc-800"
           >
             {etapasVisiveis.map((aba) => {
               const ativa = etapaAtiva === aba;
@@ -1055,9 +1346,9 @@ export function CacadorApp() {
             })}
           </nav>
 
-          {/* Aviso de Trava Mecânica */}
+          {/* Aviso de Trava Mecânica (oculto no modo gerenciar mobile para economizar espaço vertical) */}
           {travadaMecanica && (
-            <div className="flex items-center gap-2.5 px-4 py-3 rounded-lg bg-zinc-900/70 border border-zinc-800 text-xs text-zinc-300">
+            <div className="hidden sm:flex items-center gap-2.5 px-4 py-3 rounded-lg bg-zinc-900/70 border border-zinc-800 text-xs text-zinc-300">
               <Lock className="w-4 h-4 text-[#f08b21] shrink-0" />
               <span>
                 Ficha finalizada. A criação mecânica está bloqueada; use a aba{" "}
@@ -1152,7 +1443,48 @@ export function CacadorApp() {
         </main>
       )}
 
-      <footer className="py-5 border-t border-zinc-900 text-center text-xs text-zinc-600">
+      {/* BARRA INFERIOR FIXA ESTILO APP NO CELULAR (< sm) DURANTE JOGO */}
+      {modoTela === "gerenciar" && !adminEditandoFicha && (
+        <nav
+          aria-label="Navegação rápida da ficha no celular"
+          className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0c0c0f]/95 backdrop-blur-md border-t border-zinc-800/90 grid grid-cols-6 px-1 py-1.5"
+        >
+          {(
+            [
+              { id: "preview", label: "Ficha", icon: FileText },
+              { id: "dano", label: "Danos", icon: HeartPulse },
+              { id: "rolagem", label: "Rolagem", icon: Dices },
+              { id: "iniciativa", label: "Iniciat.", icon: ListOrdered },
+              { id: "xp", label: "XP", icon: Sparkles },
+              { id: "extras", label: "Extras", icon: BookOpen },
+            ] as const
+          ).map((item) => {
+            const Icon = item.icon;
+            const ativa = etapaAtiva === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setEtapaAtiva(item.id)}
+                className={`flex flex-col items-center justify-center gap-0.5 py-1 rounded-lg transition cursor-pointer ${
+                  ativa ? "text-[#f08b21] bg-[#f08b21]/10" : "text-zinc-400"
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="text-[9px] font-semibold tracking-tight leading-none">
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
+      <footer
+        className={`py-5 border-t border-zinc-900 text-center text-xs text-zinc-600 ${
+          modoTela === "gerenciar" && !adminEditandoFicha ? "hidden sm:block" : ""
+        }`}
+      >
         Caçador: A Revanche (5ª Edição) · Plataforma de Fichas &amp; Escudo da
         Crônica
       </footer>

@@ -292,9 +292,15 @@ interface WidgetUltimaRolagemCantoProps {
 export function WidgetUltimaRolagemCanto({
   rolagem,
 }: WidgetUltimaRolagemCantoProps) {
-  const [minimizado, setMinimizado] = useState(false);
+  const [minimizado, setMinimizado] = useState(true);
   const [girando, setGirando] = useState(false);
   const ultimoIdVistoRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 640) {
+      setMinimizado(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!rolagem) return;
@@ -302,7 +308,9 @@ export function WidgetUltimaRolagemCanto({
       ultimoIdVistoRef.current !== null &&
       ultimoIdVistoRef.current !== rolagem.id
     ) {
-      setMinimizado(false);
+      if (typeof window !== "undefined" && window.innerWidth >= 640) {
+        setMinimizado(false);
+      }
       setGirando(true);
       const t = setTimeout(() => setGirando(false), 800);
       ultimoIdVistoRef.current = rolagem.id;
@@ -313,7 +321,7 @@ export function WidgetUltimaRolagemCanto({
 
   if (!rolagem) {
     return (
-      <div className="pointer-events-auto rounded-xl bg-zinc-950/90 backdrop-blur-md border border-zinc-800/90 px-3 py-2 shadow-xl text-[11px] text-zinc-500">
+      <div className="hidden sm:block pointer-events-auto rounded-xl bg-zinc-950/90 backdrop-blur-md border border-zinc-800/90 px-3 py-2 shadow-xl text-[11px] text-zinc-500">
         Nenhuma rolagem recente
       </div>
     );
@@ -322,16 +330,20 @@ export function WidgetUltimaRolagemCanto({
   const dadosDesespero = rolagem.dadosDesespero ?? [];
 
   return (
-    <div className="pointer-events-auto w-64 sm:w-72 rounded-xl bg-zinc-950/92 backdrop-blur-md border border-zinc-700/80 shadow-2xl overflow-hidden text-xs">
+    <div
+      className={`pointer-events-auto rounded-xl bg-zinc-950/92 backdrop-blur-md border border-zinc-700/80 shadow-2xl overflow-hidden text-xs transition-all ${
+        minimizado ? "w-auto max-w-[85vw] sm:w-72" : "w-64 max-w-[88vw] sm:w-72"
+      }`}
+    >
       <button
         type="button"
         onClick={() => setMinimizado((v) => !v)}
-        className="w-full px-3 py-2 flex items-center justify-between gap-2 bg-zinc-900/90 border-b border-zinc-800/80 text-left cursor-pointer"
+        className="w-full px-2.5 sm:px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2 bg-zinc-900/90 border-b border-zinc-800/80 text-left cursor-pointer"
       >
         <div className="flex items-center gap-1.5 min-w-0">
           <Dices className="w-3.5 h-3.5 text-[#f08b21] shrink-0" />
-          <span className="font-semibold text-zinc-200 truncate">
-            Última: {rolagem.etiqueta}
+          <span className="font-semibold text-zinc-200 truncate max-w-[115px] sm:max-w-none">
+            {minimizado ? rolagem.autor : `Última: ${rolagem.etiqueta}`}
           </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

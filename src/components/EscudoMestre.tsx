@@ -12,8 +12,10 @@ import {
   Eye,
   EyeOff,
   FileText,
+  History,
   Layers,
   ListOrdered,
+  Map as MapIcon,
   Play,
   Plus,
   RefreshCw,
@@ -97,6 +99,9 @@ export function EscudoMestre({
   onNotify,
 }: EscudoMestreProps) {
   const [abaAtiva, setAbaAtiva] = useState<AbaEscudoId>("raiox");
+  const [abaRolagensMobile, setAbaRolagensMobile] = useState<
+    "rolar" | "historico" | "grid"
+  >("grid");
   const [carregando, setCarregando] = useState(true);
   const [buscaFicha, setBuscaFicha] = useState("");
   const [statusNotas, setStatusNotas] = useState<
@@ -788,18 +793,18 @@ export function EscudoMestre({
     "w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-[#f08b21] transition";
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4 sm:space-y-5">
       {/* Cabeçalho do Escudo */}
-      <div className="bg-[#141416] border border-zinc-800/90 rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-[#f08b21]/10 border border-[#f08b21]/30 flex items-center justify-center text-[#f08b21]">
-            <Shield className="w-5 h-5" />
+      <div className="bg-[#141416] border border-zinc-800/90 rounded-xl p-3.5 sm:p-6 flex items-center justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-[#f08b21]/10 border border-[#f08b21]/30 flex items-center justify-center text-[#f08b21] shrink-0">
+            <Shield className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-zinc-100">
+          <div className="min-w-0">
+            <h2 className="font-display text-lg sm:text-2xl font-bold uppercase tracking-wide text-zinc-100 truncate">
               Escudo do Mestre
             </h2>
-            <p className="text-sm text-zinc-400">
+            <p className="hidden sm:block text-sm text-zinc-400">
               Controle centralizado da crônica, grupos, iniciativa, rolagens e
               credenciais de acesso.
             </p>
@@ -810,19 +815,36 @@ export function EscudoMestre({
           type="button"
           onClick={() => carregarTudo(false)}
           disabled={carregando}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-semibold uppercase tracking-wider transition cursor-pointer self-start sm:self-auto"
+          className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-semibold uppercase tracking-wider transition cursor-pointer shrink-0"
         >
           <RefreshCw
             className={`w-4 h-4 ${carregando ? "animate-spin" : ""}`}
           />
-          Sincronizar Escudo
+          <span className="hidden sm:inline">Sincronizar Escudo</span>
         </button>
       </div>
 
-      {/* Navegação por Abas do Escudo */}
+      {/* Seletor de Seção Compacto no Celular (< sm) */}
+      <div className="sm:hidden bg-[#141416] border border-zinc-800/90 rounded-xl p-1.5">
+        <select
+          value={abaAtiva}
+          onChange={(e) => setAbaAtiva(e.target.value as AbaEscudoId)}
+          aria-label="Selecionar seção do Escudo do Mestre"
+          className="w-full px-3 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs font-bold uppercase tracking-wider text-[#f08b21] focus:outline-none"
+        >
+          {abas.map((aba) => (
+            <option key={`mob-esc-${aba.id}`} value={aba.id}>
+              {aba.label}
+              {aba.badge !== undefined ? ` (${aba.badge})` : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Navegação por Abas do Escudo em Tablet & PC (sm+) */}
       <nav
         aria-label="Seções do Escudo do Mestre"
-        className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-zinc-800"
+        className="hidden sm:flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-zinc-800"
       >
         {abas.map((aba) => {
           const Icon = aba.icon;
@@ -1196,9 +1218,53 @@ export function EscudoMestre({
 
       {/* ABA 3: ROLAGENS & HISTÓRICO CENTRALIZADO DO MESTRE */}
       {abaAtiva === "rolagens" && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
+          {/* Seletor Mobile Exclusivo (< sm) */}
+          <div className="sm:hidden grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-zinc-950 border border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setAbaRolagensMobile("rolar")}
+              className={`inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
+                abaRolagensMobile === "rolar"
+                  ? "bg-[#f08b21] text-zinc-950"
+                  : "text-zinc-400"
+              }`}
+            >
+              <Dices className="w-3.5 h-3.5" />
+              Rolar
+            </button>
+            <button
+              type="button"
+              onClick={() => setAbaRolagensMobile("historico")}
+              className={`inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
+                abaRolagensMobile === "historico"
+                  ? "bg-[#f08b21] text-zinc-950"
+                  : "text-zinc-400"
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              Histórico
+            </button>
+            <button
+              type="button"
+              onClick={() => setAbaRolagensMobile("grid")}
+              className={`inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
+                abaRolagensMobile === "grid"
+                  ? "bg-[#f08b21] text-zinc-950"
+                  : "text-zinc-400"
+              }`}
+            >
+              <MapIcon className="w-3.5 h-3.5" />
+              Grid
+            </button>
+          </div>
+
           {/* Rolador do Mestre */}
-          <div className="bg-[#141416] border border-zinc-800/90 rounded-xl p-5 sm:p-6 space-y-4">
+          <div
+            className={`${
+              abaRolagensMobile === "rolar" ? "block" : "hidden sm:block"
+            } bg-[#141416] border border-zinc-800/90 rounded-xl p-4 sm:p-6 space-y-4`}
+          >
             <h3 className="font-display text-xl font-bold uppercase tracking-wide text-zinc-100 flex items-center gap-2">
               <Dices className="w-5 h-5 text-[#f08b21]" />
               Rolagem do Mestre
@@ -1270,7 +1336,11 @@ export function EscudoMestre({
           </div>
 
           {/* Histórico Centralizado (Estilo Mestre: Públicas + Privadas + Jogadores) */}
-          <div className="bg-[#141416] border border-zinc-800/90 rounded-xl p-2 sm:p-3">
+          <div
+            className={`${
+              abaRolagensMobile === "historico" ? "block" : "hidden sm:block"
+            } bg-[#141416] border border-zinc-800/90 rounded-xl p-2 sm:p-3`}
+          >
             <HistoricoCentralizado
               estilo="mestre"
               userEmail={userEmail}
@@ -1285,7 +1355,11 @@ export function EscudoMestre({
           </div>
 
           {/* Grid Tático Completo do Mestre no final da aba Rolagens e Grid */}
-          <div className="bg-[#141416] border border-zinc-800/90 rounded-xl p-2 sm:p-3">
+          <div
+            className={`${
+              abaRolagensMobile === "grid" ? "block" : "hidden sm:block"
+            } bg-[#141416] border border-zinc-800/90 rounded-xl p-2 sm:p-3`}
+          >
             <GridTaticoCombate
               modo="mestre"
               autenticado={true}

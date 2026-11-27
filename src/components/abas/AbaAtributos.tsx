@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CaracteristicaRow } from "@/components/CaracteristicaRow";
 import {
   ATRIBUTOS_GRUPOS,
@@ -21,6 +22,7 @@ export function AbaAtributos({
   travada,
   onChange,
 }: AbaAtributosProps) {
+  const [grupoMobile, setGrupoMobile] = useState<string>("fisicos");
   const contagem = contarValoresAtributos(ficha);
   const metas: Array<[number, number]> = [
     [4, 1],
@@ -66,11 +68,34 @@ export function AbaAtributos({
         </div>
       </div>
 
+      {/* SELETOR DE CATEGORIA NO CELULAR (< sm) */}
+      <div className="sm:hidden grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-zinc-950 border border-zinc-800">
+        {ATRIBUTOS_GRUPOS.map((grupo) => {
+          const ativo = grupoMobile === grupo.chave;
+          return (
+            <button
+              key={`mob-${grupo.chave}`}
+              type="button"
+              onClick={() => setGrupoMobile(grupo.chave)}
+              className={`py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
+                ativo
+                  ? "bg-[#f08b21] text-zinc-950"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {grupo.grupo}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {ATRIBUTOS_GRUPOS.map((grupo) => (
           <div
             key={grupo.chave}
-            className="bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-4 space-y-2.5"
+            className={`${
+              grupoMobile === grupo.chave ? "block" : "hidden sm:block"
+            } bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3.5 sm:p-4 space-y-2.5`}
           >
             <h3 className="font-display text-lg font-semibold uppercase tracking-wider text-[#f08b21] pb-2 border-b border-zinc-800">
               {grupo.grupo}

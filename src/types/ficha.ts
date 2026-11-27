@@ -309,6 +309,7 @@ export interface TokenMapa {
   nome: string;
   cor: string;
   sigla: string;
+  imagemUrl?: string;
   x: number;
   y: number;
   tamanho: 1 | 2 | 3;
@@ -321,7 +322,10 @@ export interface TokenMapa {
 
 export interface MapaTaticoEstado {
   visivelJogadores: boolean;
+  posicionamentoJogadoresLiberado: boolean;
   movimentoJogadoresLiberado: boolean;
+  jogadoresTravadosInsercao: string[];
+  jogadoresTravadosMovimento: string[];
   titulo: string;
   imagemUrl: string;
   temaFundo: TemaFundoMapa;

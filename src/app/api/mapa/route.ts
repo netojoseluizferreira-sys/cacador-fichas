@@ -22,6 +22,7 @@ const TokenSchema = z.object({
   nome: z.string(),
   cor: z.string().default("#f08b21"),
   sigla: z.string().max(4).default("CA"),
+  imagemUrl: z.string().max(450_000).optional(),
   x: z.number().int().min(0).max(60),
   y: z.number().int().min(0).max(60),
   tamanho: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
@@ -34,9 +35,12 @@ const TokenSchema = z.object({
 
 const SalvarMapaMestreSchema = z.object({
   visivelJogadores: z.boolean().default(false),
+  posicionamentoJogadoresLiberado: z.boolean().default(true),
   movimentoJogadoresLiberado: z.boolean().default(true),
+  jogadoresTravadosInsercao: z.array(z.string()).max(200).default([]),
+  jogadoresTravadosMovimento: z.array(z.string()).max(200).default([]),
   titulo: z.string().max(120).default("Cena de Conflito"),
-  imagemUrl: z.string().max(2000).default(""),
+  imagemUrl: z.string().max(2_500_000).default(""),
   temaFundo: z
     .enum(["asfalto", "galpao", "hospital", "subterraneo", "floresta"])
     .default("asfalto"),
@@ -45,7 +49,7 @@ const SalvarMapaMestreSchema = z.object({
   opacidadeGrid: z.number().min(0.05).max(1).default(0.3),
   corGrid: z.string().max(32).default("#ffffff"),
   fogCelulas: z.array(z.string()).max(2000).default([]),
-  tokens: z.array(TokenSchema).max(120).default([]),
+  tokens: z.array(TokenSchema).max(150).default([]),
 });
 
 const AcaoJogadorSchema = z.discriminatedUnion("acao", [
@@ -55,6 +59,7 @@ const AcaoJogadorSchema = z.discriminatedUnion("acao", [
     x: z.number().int().min(0).max(60),
     y: z.number().int().min(0).max(60),
     cor: z.string().max(24).optional(),
+    imagemUrl: z.string().max(450_000).optional(),
   }),
   z.object({
     acao: z.literal("mover_meu_token"),
@@ -66,9 +71,17 @@ const AcaoJogadorSchema = z.discriminatedUnion("acao", [
     acao: z.literal("recolher_meu_token"),
     tokenId: z.string().min(1),
   }),
+  z.object({
+    acao: z.literal("atualizar_aparencia_meu_token"),
+    tokenId: z.string().min(1),
+    cor: z.string().max(24).optional(),
+    imagemUrl: z.string().max(450_000).optional(),
+  }),
 ]);
 
-function normalizarMapa(bruto?: Partial<MapaTaticoEstado> | null): MapaTaticoEstado {
+function normalizarMapa(
+  bruto?: Partial<MapaTaticoEstado> | null
+): MapaTaticoEstado {
   const temasValidos: TemaFundoMapa[] = [
     "asfalto",
     "galpao",
@@ -83,10 +96,20 @@ function normalizarMapa(bruto?: Partial<MapaTaticoEstado> | null): MapaTaticoEst
 
   return {
     visivelJogadores: Boolean(bruto?.visivelJogadores),
+    posicionamentoJogadoresLiberado:
+      bruto?.posicionamentoJogadoresLiberado === undefined
+        ? true
+        : Boolean(bruto.posicionamentoJogadoresLiberado),
     movimentoJogadoresLiberado:
       bruto?.movimentoJogadoresLiberado === undefined
         ? true
         : Boolean(bruto.movimentoJogadoresLiberado),
+    jogadoresTravadosInsercao: Array.isArray(bruto?.jogadoresTravadosInsercao)
+      ? bruto.jogadoresTravadosInsercao
+      : [],
+    jogadoresTravadosMovimento: Array.isArray(bruto?.jogadoresTravadosMovimento)
+      ? bruto.jogadoresTravadosMovimento
+      : [],
     titulo: String(bruto?.titulo || "Cena de Conflito"),
     imagemUrl: String(bruto?.imagemUrl || ""),
     temaFundo: tema,
@@ -103,11 +126,19 @@ function normalizarMapa(bruto?: Partial<MapaTaticoEstado> | null): MapaTaticoEst
   };
 }
 
+function jogadorEstaTravadoNaLista(
+  lista: string[],
+  fichaId?: string | null,
+  email?: string | null
+): boolean {
+  const setNorm = new Set(lista.map((x) => x.trim().toLowerCase()));
+  if (fichaId && setNorm.has(fichaId.trim().toLowerCase())) return true;
+  if (email && setNorm.has(email.trim().toLowerCase())) return true;
+  return false;
+}
+
 function gerarSigla(nome: string): string {
-  const partes = nome
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
   if (partes.length === 0) return "CA";
   if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
   return `${partes[0][0]}${partes[partes.length - 1][0]}`.toUpperCase();
@@ -149,7 +180,7 @@ async function buscarUltimaRolagem(
     db
       .select()
       .from(rolagensJogadoresPublicas)
-      .orderBy(desc(rolagensJogadoresPublicas.createdAt))
+      .orderBy(desc(rolagensJogadoresPublicas.updatedAt))
       .limit(1),
   ]);
 
@@ -283,7 +314,6 @@ export async function GET() {
     const fogSet = new Set(mapaCompleto.fogCelulas);
     const meusIds = new Set(minhasFichas.map((f) => f.id));
 
-    // Oculta tokens furtivos e tokens de inimigos dentro do Fog of War
     const tokensVisiveisParaJogador = mapaCompleto.tokens.filter((t) => {
       const ehMeu =
         (t.fichaId && meusIds.has(t.fichaId)) ||
@@ -400,17 +430,51 @@ export async function POST(request: Request) {
       if (!user.isAdmin && !mapa.visivelJogadores) {
         return { erro: "O mapa não está ativo no momento.", status: 403 };
       }
-      if (!user.isAdmin && !mapa.movimentoJogadoresLiberado) {
-        return {
-          erro: "O Mestre pausou a movimentação dos jogadores no mapa.",
-          status: 403,
-        };
-      }
 
       const fogSet = new Set(mapa.fogCelulas);
       const acao = parsed.data;
 
+      const verificarDonoDoToken = async (tokenAlvo: TokenMapa) => {
+        if (user.isAdmin) return true;
+        if (
+          tokenAlvo.ownerEmail &&
+          tokenAlvo.ownerEmail.trim().toLowerCase() === emailLower
+        ) {
+          return true;
+        }
+        if (tokenAlvo.fichaId) {
+          const [ficha] = await tx
+            .select({ userId: fichas.userId, ownerEmail: fichas.ownerEmail })
+            .from(fichas)
+            .where(eq(fichas.id, tokenAlvo.fichaId))
+            .limit(1);
+          if (
+            ficha &&
+            (ficha.userId === user.id ||
+              ficha.ownerEmail.trim().toLowerCase() === emailLower)
+          ) {
+            return true;
+          }
+        }
+        return false;
+      };
+
       if (acao.acao === "colocar_meu_token") {
+        if (
+          !user.isAdmin &&
+          (!mapa.posicionamentoJogadoresLiberado ||
+            jogadorEstaTravadoNaLista(
+              mapa.jogadoresTravadosInsercao,
+              acao.fichaId,
+              emailLower
+            ))
+        ) {
+          return {
+            erro: "O Mestre travou a opção de inserir/posicionar seu token no mapa.",
+            status: 403,
+          };
+        }
+
         const [ficha] = await tx
           .select()
           .from(fichas)
@@ -449,14 +513,18 @@ export async function POST(request: Request) {
         const existenteIdx = mapa.tokens.findIndex(
           (t) => t.fichaId === ficha.id
         );
+        const tokenExistente =
+          existenteIdx !== -1 ? mapa.tokens[existenteIdx] : undefined;
+
         const novoToken: TokenMapa = {
-          id:
-            existenteIdx !== -1
-              ? mapa.tokens[existenteIdx].id
-              : `tok-${ficha.id.slice(0, 8)}`,
+          id: tokenExistente?.id || `tok-${ficha.id.slice(0, 8)}`,
           nome: nomePersonagem,
-          cor: acao.cor || "#f08b21",
+          cor: acao.cor || tokenExistente?.cor || "#f08b21",
           sigla: gerarSigla(nomePersonagem),
+          imagemUrl:
+            acao.imagemUrl !== undefined
+              ? acao.imagemUrl
+              : tokenExistente?.imagemUrl,
           x,
           y,
           tamanho: 1,
@@ -478,32 +546,24 @@ export async function POST(request: Request) {
         }
 
         const tokenAlvo = mapa.tokens[idx];
-        let autorizado = user.isAdmin;
-        if (!autorizado) {
-          if (
-            tokenAlvo.ownerEmail &&
-            tokenAlvo.ownerEmail.trim().toLowerCase() === emailLower
-          ) {
-            autorizado = true;
-          } else if (tokenAlvo.fichaId) {
-            const [ficha] = await tx
-              .select({ userId: fichas.userId, ownerEmail: fichas.ownerEmail })
-              .from(fichas)
-              .where(eq(fichas.id, tokenAlvo.fichaId))
-              .limit(1);
-            if (
-              ficha &&
-              (ficha.userId === user.id ||
-                ficha.ownerEmail.trim().toLowerCase() === emailLower)
-            ) {
-              autorizado = true;
-            }
-          }
-        }
-
-        if (!autorizado) {
+        if (!(await verificarDonoDoToken(tokenAlvo))) {
           return {
             erro: "Você só pode mover o token do seu próprio personagem.",
+            status: 403,
+          };
+        }
+
+        if (
+          !user.isAdmin &&
+          (!mapa.movimentoJogadoresLiberado ||
+            jogadorEstaTravadoNaLista(
+              mapa.jogadoresTravadosMovimento,
+              tokenAlvo.fichaId,
+              emailLower
+            ))
+        ) {
+          return {
+            erro: "Sua movimentação no mapa está travada pelo Mestre no momento.",
             status: 403,
           };
         }
@@ -526,29 +586,47 @@ export async function POST(request: Request) {
           return { ok: true };
         }
         const tokenAlvo = mapa.tokens[idx];
-        const autorizado =
-          user.isAdmin ||
-          (tokenAlvo.ownerEmail &&
-            tokenAlvo.ownerEmail.trim().toLowerCase() === emailLower);
-
-        if (!autorizado && tokenAlvo.fichaId) {
-          const [ficha] = await tx
-            .select({ userId: fichas.userId, ownerEmail: fichas.ownerEmail })
-            .from(fichas)
-            .where(eq(fichas.id, tokenAlvo.fichaId))
-            .limit(1);
-          if (
-            !ficha ||
-            (ficha.userId !== user.id &&
-              ficha.ownerEmail.trim().toLowerCase() !== emailLower)
-          ) {
-            return { erro: "Sem permissão para recolher este token.", status: 403 };
-          }
-        } else if (!autorizado) {
-          return { erro: "Sem permissão para recolher este token.", status: 403 };
+        if (!(await verificarDonoDoToken(tokenAlvo))) {
+          return {
+            erro: "Sem permissão para recolher este token.",
+            status: 403,
+          };
+        }
+        if (
+          !user.isAdmin &&
+          (!mapa.posicionamentoJogadoresLiberado ||
+            jogadorEstaTravadoNaLista(
+              mapa.jogadoresTravadosInsercao,
+              tokenAlvo.fichaId,
+              emailLower
+            ))
+        ) {
+          return {
+            erro: "O Mestre travou o posicionamento/remoção do seu token.",
+            status: 403,
+          };
         }
 
         mapa.tokens.splice(idx, 1);
+      } else if (acao.acao === "atualizar_aparencia_meu_token") {
+        const idx = mapa.tokens.findIndex((t) => t.id === acao.tokenId);
+        if (idx === -1) {
+          return { erro: "Token não encontrado no mapa.", status: 404 };
+        }
+        const tokenAlvo = mapa.tokens[idx];
+        if (!(await verificarDonoDoToken(tokenAlvo))) {
+          return {
+            erro: "Sem permissão para editar este token.",
+            status: 403,
+          };
+        }
+
+        mapa.tokens[idx] = {
+          ...tokenAlvo,
+          cor: acao.cor !== undefined ? acao.cor : tokenAlvo.cor,
+          imagemUrl:
+            acao.imagemUrl !== undefined ? acao.imagemUrl : tokenAlvo.imagemUrl,
+        };
       }
 
       mapa.updatedAt = new Date().toISOString();
